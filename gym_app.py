@@ -84,9 +84,13 @@ def calcular_macros(u):
     estatura_cm = u.get('estatura_m', 1.70) * 100
     edad = u.get('edad', 25)
     dias = u.get('dias_entreno', 5)
+    sexo = u.get('sexo', 'Masculino')
     
-    # BMR (Mifflin-St Jeor)
-    bmr = (10 * peso_kg) + (6.25 * estatura_cm) - (5 * edad) + 5
+    # BMR (Mifflin-St Jeor) - fórmula según sexo
+    if sexo == 'Femenino':
+        bmr = (10 * peso_kg) + (6.25 * estatura_cm) - (5 * edad) - 161
+    else:  # Masculino
+        bmr = (10 * peso_kg) + (6.25 * estatura_cm) - (5 * edad) + 5
     
     # Multiplicador dinámico basado en días de entreno
     activ = 1.2 if dias < 3 else (1.375 if dias == 3 else (1.55 if dias == 4 else 1.725))
@@ -245,6 +249,7 @@ if not st.session_state.data.get("perfil_completado", False):
     with st.form("registro_inicial"):
         st.markdown("#### 👤 Datos Personales")
         nombre = st.text_input("¿Cuál es tu nombre?")
+        sexo = st.selectbox("Sexo", ["Masculino", "Femenino"], index=0)
         
         st.markdown("#### 📏 Medidas y Objetivos")
         c_p, c_ft, c_in, c_ed = st.columns(4)
@@ -264,7 +269,7 @@ if not st.session_state.data.get("perfil_completado", False):
             if nombre and objs:
                 est_m = ((pies * 12) + pulgadas) * 0.0254
                 st.session_state.data["user"] = {
-                    "nombre": nombre, "peso_lb": peso, "pies": pies, 
+                    "nombre": nombre, "sexo": sexo, "peso_lb": peso, "pies": pies, 
                     "pulgadas": pulgadas, "estatura_m": est_m, "objetivos": objs,
                     "edad": edad, "dias_entreno": dias_e
                 }
