@@ -16,8 +16,11 @@ def guardar_todo(datos):
 
 def cargar_todo():
     if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r") as f:
-            return json.load(f)
+        try:
+            with open(DB_FILE, "r") as f:
+                return json.load(f)
+        except:
+            pass
     return {
         "perfil_completado": False, 
         "user": {}, 
@@ -38,6 +41,12 @@ u_edad = user_data.get("edad", 0)
 u_imc = user_data.get("imc", 0)
 u_peso = user_data.get("peso", 0)
 
+# --- PROTECCIÓN PARA MULTISELECT ---
+opciones_objetivos = ["Bajar de peso", "Tonificar", "Masa Muscular"]
+objetivos_guardados = user_data.get("objetivos", [])
+# Solo dejamos los objetivos que sí existen en nuestra lista actual para evitar el error
+objetivos_validos = [obj for obj in objetivos_guardados if obj in opciones_objetivos]
+
 if u_edad == 0 or u_imc == 0 or u_peso == 0:
     st.session_state.data["perfil_completado"] = False
 
@@ -55,7 +64,8 @@ if not st.session_state.data["perfil_completado"]:
     est_m = ((pies * 12) + pulgadas) * 0.0254
     imc_calc = (p_lb * 0.453592) / (est_m ** 2) if est_m > 0 else 0
     
-    objs = st.multiselect("Objetivos", ["Bajar de peso", "Tonificar", "Masa Muscular"], default=user_data.get("objetivos", []))
+    # Aquí ya usamos la lista filtrada 'objetivos_validos'
+    objs = st.multiselect("Objetivos", opciones_objetivos, default=objetivos_validos)
 
     if st.button("Guardar y Recalcular todo"):
         st.session_state.data["user"] = {
@@ -65,7 +75,7 @@ if not st.session_state.data["perfil_completado"]:
         st.session_state.data["perfil_completado"] = True
         guardar_todo(st.session_state.data); st.rerun()
 
-# --- PANTALLA PRINCIPAL ---
+# --- EL RESTO DEL CÓDIGO SE MANTIENE IGUAL ---
 else:
     st.title(f"💪 Panel de {u_nombre}")
     
@@ -127,7 +137,6 @@ else:
         st.header("🔮 Inteligencia Artificial")
         rutinas_ia = st.session_state.data.get("rutinas", [])
         
-        # 1. COMPOSICIÓN (GRASA Y MASA MAGRA)
         pk = u_peso * 0.453592
         grasa = (1.20 * u_imc) + (0.23 * u_edad) - 16.2
         mm = pk * (1 - (max(0, grasa)/100))
@@ -141,26 +150,19 @@ else:
         st.divider()
 
         if not rutinas_ia:
-            st.warning("Registra ejercicios de fuerza y cardio para ver tus proyecciones.")
+            st.warning("Registra ejercicios para ver tus proyecciones.")
         else:
-            # 2. RECUPERACIÓN MUSCULAR
             st.subheader("🔋 Estado de Recuperación")
             idx_hoy = datetime.now().weekday()
             dias_ref = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-            
             recup_status = {}
-            vol_muscular = {}
             vol_total = 0
             
             for r in rutinas_ia:
                 if not r.get("es_cardio"):
                     g = r["grupo"]
-                    # Calcular volumen
                     v = sum([s['reps'] * s['peso'] for s in r['detalles']])
-                    vol_muscular[g] = vol_muscular.get(g, 0) + v
                     vol_total += v
-                    
-                    # Calcular días de descanso
                     diff = (idx_hoy - dias_ref.index(r["dia"])) % 7
                     recup_status[g] = "🔴 Recuperando" if diff < 2 else "🟢 Listo"
             
@@ -170,27 +172,17 @@ else:
                     cols_r[i].write(f"**{m}**\n{s}")
 
             st.divider()
-
-            # 3. PROYECCIÓN Y EPOC
             st.subheader("🚀 Rendimiento Futuro")
             col_izq, col_der = st.columns(2)
-            
             with col_izq:
-                if vol_total > 0:
-                    st.write("**📈 Proyección a 90 días:**")
-                    st.write(f"Tu volumen de carga subirá a **{vol_total * 1.25:.0f} lbs** si mantienes la disciplina.")
-                else:
-                    st.write("Agrega ejercicios con pesas para calcular tu proyección.")
-            
+                st.write("**📈 Proyección a 90 días:**")
+                st.write(f"Carga: **{vol_total * 1.25:.0f} lbs**")
             with col_der:
                 lista_i = [x['inclinacion'] for x in rutinas_ia if x.get("es_cardio")]
                 if lista_i:
-                    max_inc = max(lista_i)
-                    horas_q = 5 if max_inc > 8 else 2
-                    st.write(f"**🔥 Quema de Grasa (EPOC):**")
-                    st.write(f"Tu metabolismo seguirá acelerado por **{horas_q} horas** extras gracias a la inclinación.")
-                else:
-                    st.write("Haz cardio con inclinación para ver tu efecto EPOC.")
+                    horas_q = 5 if max(lista_i) > 8 else 2
+                    st.write(f"**🔥 Efecto EPOC:**")
+                    st.write(f"**{horas_q} horas** extras.")
 
     st.divider()
     if st.button("⚙️ Editar Perfil / Cambiar Peso"):
