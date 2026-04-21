@@ -236,10 +236,10 @@ else:
                         rutina[dia][i]['reps'] = c3.text_input("Reps", ej['reps'], key=f"r_{dia}_{i}")
                         rutina[dia][i]['libras'] = c4.number_input("Lbs", 0.0, 1000.0, float(ej['libras']), key=f"l_{dia}_{i}")
         
-            if st.button("💾 Guardar Cambios en la Rutina"):
-                st.session_state.data["rutina_semanal"] = rutina
-                guardar_todo(st.session_state.data)
-                st.toast("¡Cambios guardados!", icon="✅")
+        if st.button("💾 Guardar Cambios en la Rutina"):
+            st.session_state.data["rutina_semanal"] = rutina
+            guardar_todo(st.session_state.data)
+            st.toast("¡Cambios guardados!", icon="✅")
 
     with t_progreso:
         st.markdown("### 📊 Evolución y Análisis Nutricional")
