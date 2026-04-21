@@ -29,7 +29,8 @@ def cargar_todo():
         "medidas": [],
         "biblioteca_personal": {
             "Press de Banca": "Pecho", "Sentadillas": "Piernas", 
-            "Peso Muerto": "Espalda", "Caminata Inclinada": "Cardio"
+            "Peso Muerto": "Espalda", "Caminata Inclinada": "Cardio",
+            "Press Militar": "Hombros", "Cur de Bíceps": "Brazos"
         }
     }
 
@@ -62,204 +63,159 @@ else:
     tabs = st.tabs(["📅 Rutina", "📊 Progreso", "🔮 Super IA", "🏆 Logros", "👤 Perfil"])
     tab1, tab2, tab3, tab4, tab5 = tabs
 
-    # --- TAB 1: RUTINA ---
+    # --- TAB 1: RUTINA (MODO ENFOQUE Y DESCANSO) ---
     with tab1:
-        col_header, col_tools = st.columns([2, 1])
-        with col_header:
-            st.header("Entrenamiento de Hoy")
-        with col_tools:
-            with st.popover("⏱️ Descanso"):
-                segundos = st.slider("Segundos", 30, 180, 90, step=30)
-                if st.button("Iniciar"):
+        st.header("Entrenamiento Activo")
+        
+        # Selector de Ejercicio Actual
+        biblioteca = st.session_state.data["biblioteca_personal"]
+        ejercicios_lista = list(biblioteca.keys())
+        
+        col_ej, col_rest = st.columns([2, 1])
+        
+        with col_ej:
+            ej_actual = st.selectbox("🎯 Ejercicio en ejecución:", ejercicios_lista, index=0)
+            st.info(f"Trabajando ahora: **{ej_actual}** ({biblioteca.get(ej_actual)})")
+
+        with col_rest:
+            # Popover para configuración de descanso rápida
+            with st.popover("⏱️ Timer"):
+                t_descanso = st.select_slider("Segundos", options=[30, 45, 60, 90, 120, 180], value=90)
+                if st.button("🔔 Iniciar"):
                     placeholder = st.empty()
-                    for t in range(segundos, -1, -1):
-                        placeholder.metric("Vuelve en:", f"{t}s")
+                    for t in range(t_descanso, -1, -1):
+                        placeholder.metric("Descansa...", f"{t}s")
                         time.sleep(1)
                     st.balloons()
+                    st.success("¡Siguiente serie!")
 
-        dia = st.selectbox("Día de la semana", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
-        biblioteca = st.session_state.data["biblioteca_personal"]
-        ej_sel = st.selectbox("Selecciona Ejercicio", list(biblioteca.keys()))
-        
-        if biblioteca.get(ej_sel) == "Cardio":
+        st.divider()
+
+        # Registro de Series del Ejercicio Actual
+        if biblioteca.get(ej_actual) == "Cardio":
             c1, c2 = st.columns(2)
             m_c = c1.number_input("Minutos", 1, 300, 30)
             i_c = c2.number_input("Inclinación", 0.0, 20.0, 10.0)
-            if st.button("➕ Registrar Cardio"):
+            if st.button(f"✅ Registrar {ej_actual}"):
                 st.session_state.data["rutinas"].append({
-                    "dia": dia, "ejercicio": ej_sel, "grupo": "Cardio", 
+                    "dia": "Hoy", 
+                    "ejercicio": ej_actual, "grupo": "Cardio", 
                     "es_cardio": True, "minutos": m_c, "inclinacion": i_c, 
                     "fecha": str(datetime.now().date())
                 })
-                guardar_todo(st.session_state.data); st.rerun()
+                guardar_todo(st.session_state.data)
+                st.success("Cardio guardado.")
         else:
             with st.expander("🧮 Calculadora de Discos"):
-                peso_target = st.number_input("Peso total objetivo (lbs)", 45, 1000, 135)
-                peso_neto = (peso_target - 45) / 2
-                if peso_neto >= 0:
-                    discos = [45, 35, 25, 10, 5, 2.5]
-                    calc_res = []
-                    for d in discos:
-                        cantidad = int(peso_neto // d)
-                        if cantidad > 0:
-                            calc_res.append(f"{cantidad} de {d}lb")
-                            peso_neto -= cantidad * d
-                    st.write("**Cada lado:** " + (", ".join(calc_res) if calc_res else "Vacío"))
+                p_obj = st.number_input("Peso total (lbs)", 45, 1000, 135, key="calc_disc_active")
+                p_lado = (p_obj - 45) / 2
+                if p_lado >= 0:
+                    discs = [45, 35, 25, 10, 5, 2.5]
+                    res = []
+                    for d in discs:
+                        cant = int(p_lado // d)
+                        if cant > 0: res.append(f"{cant}x{d}lb"); p_lado -= cant * d
+                    st.write("**En cada lado:** " + (", ".join(res) if res else "Barra sola"))
 
-            n_s = st.number_input("Número de Series", 1, 10, 3)
-            detalles_temp = []
-            cols_series = st.columns(n_s)
-            for i in range(n_s):
-                with cols_series[i]:
-                    reps_i = st.number_input(f"Reps S{i+1}", 1, 100, 10, key=f"r{i}{dia}{ej_sel}")
-                    peso_i = st.number_input(f"Lbs S{i+1}", 0.0, 1000.0, 20.0, key=f"p{i}{dia}{ej_sel}")
-                    detalles_temp.append({"serie": i+1, "reps": reps_i, "peso": peso_i})
+            n_series = st.number_input("Series", 1, 10, 3)
+            detalles_series = []
+            cols_s = st.columns(n_series)
+            for i in range(n_series):
+                with cols_s[i]:
+                    r = st.number_input(f"R{i+1}", 1, 50, 10, key=f"r_act_{ej_actual}_{i}")
+                    p = st.number_input(f"Lb{i+1}", 0.0, 1000.0, 45.0, key=f"p_act_{ej_actual}_{i}")
+                    detalles_series.append({"serie": i+1, "reps": r, "peso": p})
             
-            if st.button("➕ Registrar Ejercicio"):
+            if st.button(f"➕ Guardar {ej_actual}"):
                 st.session_state.data["rutinas"].append({
-                    "dia": dia, "ejercicio": ej_sel, "grupo": biblioteca.get(ej_sel), 
-                    "detalles": detalles_temp, "fecha": str(datetime.now().date())
+                    "dia": datetime.now().strftime("%A"), # Se traduce en la IA
+                    "ejercicio": ej_actual, "grupo": biblioteca.get(ej_actual), 
+                    "detalles": detalles_series, "fecha": str(datetime.now().date())
                 })
-                guardar_todo(st.session_state.data); st.rerun()
+                guardar_todo(st.session_state.data)
+                st.toast(f"¡{ej_actual} registrado!", icon="💪")
 
     # --- TAB 2: PROGRESO ---
     with tab2:
-        st.header("Evolución Física")
+        st.header("Historial y Medidas")
         with st.expander("📏 Registrar Medidas"):
-            col_med1, col_med2 = st.columns(2)
-            c_cintura = col_med1.number_input("Cintura (cm)", 40.0, 200.0, 80.0)
-            c_brazo = col_med2.number_input("Brazo (cm)", 15.0, 70.0, 30.0)
+            col1, col2 = st.columns(2)
+            cint = col1.number_input("Cintura (cm)", 40.0, 150.0, 80.0)
+            braz = col2.number_input("Brazo (cm)", 10.0, 70.0, 30.0)
             if st.button("Guardar Medidas"):
-                if "medidas" not in st.session_state.data: st.session_state.data["medidas"] = []
-                st.session_state.data["medidas"].append({"fecha": str(datetime.now().date()), "cintura": c_cintura, "brazo": c_brazo})
+                st.session_state.data.setdefault("medidas", []).append({"fecha": str(datetime.now().date()), "cintura": cint, "brazo": braz})
                 guardar_todo(st.session_state.data); st.rerun()
 
-        rutinas_hist = st.session_state.data.get("rutinas", [])
-        for d_nombre in ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]:
-            items_dia = [x for x in rutinas_hist if x["dia"] == d_nombre]
-            if items_dia:
-                with st.expander(f"🗓️ {d_nombre.upper()}"):
-                    for item in items_dia:
-                        st.write(f"💪 **{item['ejercicio']}**")
-                        if not item.get("es_cardio"):
-                            st.caption(" | ".join([f"S{s['serie']}: {s['reps']}x{s['peso']}lb" for s in item['detalles']]))
+        hist = st.session_state.data.get("rutinas", [])
+        if hist:
+            for item in reversed(hist[-5:]):
+                with st.container(border=True):
+                    st.write(f"📅 {item['fecha']} - **{item['ejercicio']}**")
+                    if not item.get("es_cardio"):
+                        st.caption(" | ".join([f"{s['reps']}x{s['peso']}lb" for s in item['detalles']]))
+        else: st.info("Sin registros aún.")
 
-    # --- TAB 3: SUPER IA ---
+    # --- TAB 3: SUPER IA (PROTEGIDA) ---
     with tab3:
         st.header("🔮 Super IA: Análisis 360°")
-        peso_kg = u_peso * 0.453592
-        altura_cm = u_estatura * 100
-        grasa_est = (1.20 * u_imc) + (0.23 * u_edad) - 16.2
-        masa_magra_kg = peso_kg * (1 - (max(0, grasa_est)/100))
-        tmb_resultado = (10 * peso_kg) + (6.25 * altura_cm) - (5 * u_edad) + 5
+        pk = u_peso * 0.453592
+        acm = u_estatura * 100
+        grasa = (1.20 * u_imc) + (0.23 * u_edad) - 16.2
+        mm_kg = pk * (1 - (max(0, grasa)/100))
+        tmb = (10 * pk) + (6.25 * acm) - (5 * u_edad) + 5
         
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Grasa Est.", f"{max(grasa_est, 5):.1f}%")
-        m2.metric("Masa Magra", f"{masa_magra_kg:.1f} kg")
+        m1.metric("Grasa Est.", f"{max(grasa, 5):.1f}%")
+        m2.metric("Masa Magra", f"{mm_kg:.1f} kg")
         m3.metric("Agua/Día", f"{(u_peso * 0.6) / 33.8:.1f} L")
-        m4.metric("TMB", f"{tmb_resultado:.0f} kcal")
+        m4.metric("TMB", f"{tmb:.0f} kcal")
 
         st.divider()
         rutinas_ia = st.session_state.data.get("rutinas", [])
-        if not rutinas_ia:
-            st.warning("Sin registros para análisis.")
-        else:
-            st.subheader("📊 Fuerza y Volumen")
-            fuerza_dict = {}
-            vol_total = 0
-            for r_ia in rutinas_ia:
-                if not r_ia.get("es_cardio"):
-                    vol_total += sum([s['reps'] * s['peso'] for s in r_ia['detalles']])
-                    mejor = max(r_ia['detalles'], key=lambda x: x['peso'])
-                    if 1 < mejor['reps'] <= 12:
-                        rm_c = mejor['peso'] * (36 / (37 - mejor['reps']))
-                        if r_ia['ejercicio'] not in fuerza_dict or rm_c > fuerza_dict[r_ia['ejercicio']]:
-                            fuerza_dict[r_ia['ejercicio']] = rm_c
-            
-            if fuerza_dict:
-                cols_rm = st.columns(min(len(fuerza_dict), 4))
-                for idx, (n_e, v_rm) in enumerate(fuerza_dict.items()):
-                    cols_rm[idx % 4].metric(n_e, f"{v_rm:.1f} lb")
-            
-            st.write(f"📈 **Volumen Semanal:** {vol_total:.0f} lbs. Meta Sobrecarga: **{(vol_total * 1.05):.0f} lbs**.")
+        if rutinas_ia:
+            st.subheader("📊 Análisis de Rendimiento")
+            fuerza = {}
+            vol_s = 0
+            for r in rutinas_ia:
+                if not r.get("es_cardio"):
+                    vol_s += sum([s['reps'] * s['peso'] for s in r['detalles']])
+                    best = max(r['detalles'], key=lambda x: x['peso'])
+                    if 1 < best['reps'] <= 12:
+                        rm = best['peso'] * (36 / (37 - best['reps']))
+                        if r['ejercicio'] not in fuerza or rm > fuerza[r['ejercicio']]: fuerza[r['ejercicio']] = rm
+            if fuerza:
+                cols_f = st.columns(min(len(fuerza), 4))
+                for i, (e, v) in enumerate(fuerza.items()): cols_f[i % 4].metric(e, f"{v:.1f} lb")
+            st.write(f"📈 Volumen Semanal: {vol_s:.0f} lbs.")
 
-            st.divider()
-            st.subheader("🔋 Recuperación (SNC)")
-            dia_hoy_idx = datetime.now().weekday()
-            dias_nom = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-            recuperacion = {}
-            for r_ia in rutinas_ia:
-                if not r_ia.get("es_cardio"):
-                    pasado = (dia_hoy_idx - dias_nom.index(r_ia["dia"])) % 7
-                    if r_ia["grupo"] not in recuperacion or pasado < recuperacion[r_ia["grupo"]]:
-                        recuperacion[r_ia["grupo"]] = pasado
-            
-            if recuperacion:
-                cols_r = st.columns(min(len(recuperacion), 4))
-                for i, (g, d) in enumerate(recuperacion.items()):
-                    est = "🔴 Fatiga" if d == 0 else "🟡 Recuperando" if d == 1 else "🟢 Listo"
-                    cols_r[i % 4].write(f"**{g}**\n{est}")
-
-    # --- TAB 4: LOGROS ---
+    # --- TAB 4: LOGROS (PROTEGIDA) ---
     with tab4:
-        st.header("🏆 Salón de la Fama")
-        rutinas_all = st.session_state.data.get("rutinas", [])
-        fechas_u = sorted(list(set([r["fecha"] for r in rutinas_all if "fecha" in r])))
-        racha_e = 0
-        if fechas_u:
-            hoy_curr = datetime.now().date()
-            while str(hoy_curr) in fechas_u:
-                racha_e += 1
-                hoy_curr -= timedelta(days=1)
-        st.metric("🔥 Racha Actual", f"{racha_e} Días")
-
-        st.divider()
-        st.subheader("🥇 Mis Récords Personales (PR)")
+        st.header("🏆 Logros")
+        f_u = sorted(list(set([r["fecha"] for r in st.session_state.data.get("rutinas", []) if "fecha" in r])))
+        racha = 0
+        if f_u:
+            hoy = datetime.now().date()
+            while str(hoy) in f_u: racha += 1; hoy -= timedelta(days=1)
+        st.metric("🔥 Racha de Días", f"{racha}")
+        
+        st.subheader("🥇 Récords Personales")
         prs = {}
-        for r in rutinas_all:
+        for r in st.session_state.data.get("rutinas", []):
             if not r.get("es_cardio"):
-                n_ej = r["ejercicio"]
-                p_m = max([s["peso"] for s in r["detalles"]])
-                if n_ej not in prs or p_m > prs[n_ej]: prs[n_ej] = p_m
-        if prs:
-            for ej, peso in prs.items(): st.write(f"⭐ **{ej}**: {peso} lbs")
+                ej = r["ejercicio"]
+                pm = max([s["peso"] for s in r["detalles"]])
+                if ej not in prs or pm > prs[ej]: prs[ej] = pm
+        for e, p in prs.items(): st.write(f"⭐ **{e}**: {p} lbs")
 
-    # --- TAB 5: PERFIL (CORRECCIÓN DEL MULTISELECT) ---
+    # --- TAB 5: PERFIL (CON CORRECCIÓN DE MULTISELECT) ---
     with tab5:
-        st.header("👤 Mi Perfil")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("IMC", f"{u_imc}")
-        c2.metric("Peso", f"{u_peso} lbs")
-        c3.metric("Meta", f"{u_p_max} lbs")
-
-        st.divider()
-        with st.expander("✏️ Editar mis datos"):
-            ed_nombre = st.text_input("Nombre", value=u_nombre)
-            ed_edad = st.number_input("Edad", 12, 95, value=u_edad)
-            ed_peso = st.number_input("Peso (Lbs)", 50.0, 500.0, value=float(u_peso))
-            
-            val_pies = int((u_estatura / 0.0254) // 12)
-            val_pulg = int((u_estatura / 0.0254) % 12)
-            cp1, cp2 = st.columns(2)
-            ed_pies = cp1.number_input("Pies", 3, 8, value=val_pies)
-            ed_pulg = cp2.number_input("Pulgadas", 0, 11, value=val_pulg)
-            
-            # --- SOLUCIÓN AL ERROR ---
-            opciones_objetivos = ["Bajar de peso", "Ganar Masa Muscular", "Tonificar", "Resistencia", "Fuerza Pura"]
-            # Filtramos los objetivos actuales del usuario para que solo contengan valores que están en 'opciones_objetivos'
-            objetivos_validos = [obj for obj in u_objetivos if obj in opciones_objetivos]
-            
-            ed_obj = st.multiselect("Objetivos", opciones_objetivos, default=objetivos_validos)
-            
-            if st.button("Guardar Cambios"):
-                est_f = ((ed_pies * 12) + ed_pulg) * 0.0254
-                imc_n = round((ed_peso * 0.453592) / (est_f ** 2), 1) if est_f > 0 else 0
-                p_m_n = round((24.9 * (est_f ** 2)) / 0.453592, 1)
-                
-                st.session_state.data["user"] = {
-                    "nombre": ed_nombre, "edad": ed_edad, "peso": ed_peso, 
-                    "estatura_m": est_f, "imc": imc_n, "p_max_lb": p_m_n, "objetivos": ed_obj
-                }
-                guardar_todo(st.session_state.data)
-                st.success("¡Datos actualizados correctamente!")
-                st.rerun()
+        st.header("👤 Perfil")
+        with st.expander("Editar Datos"):
+            ed_p = st.number_input("Peso (Lbs)", value=float(u_peso))
+            opts = ["Bajar de peso", "Ganar Masa Muscular", "Tonificar", "Resistencia", "Fuerza Pura"]
+            vals = [o for o in u_objetivos if o in opts]
+            ed_o = st.multiselect("Objetivos", opts, default=vals)
+            if st.button("Guardar"):
+                st.session_state.data["user"]["peso"] = ed_p
+                st.session_state.data["user"]["objetivos"] = ed_o
+                guardar_todo(st.session_state.data); st.rerun()
