@@ -24,6 +24,7 @@ if 'data' not in st.session_state:
 
 # --- LÓGICA DE CÁLCULOS ---
 def calcular_imc(peso_lb, estatura_m):
+    if estatura_m <= 0: return 0
     peso_kg = peso_lb * 0.453592
     imc = peso_kg / (estatura_m ** 2)
     return round(imc, 1)
@@ -35,7 +36,7 @@ def clasificar_imc(imc):
     else: return "Obesidad"
 
 def obtener_peso_ideal(estatura_m):
-    # Basado en el rango saludable de IMC (18.5 - 24.9)
+    if estatura_m <= 0: return 0, 0
     peso_min_kg = 18.5 * (estatura_m ** 2)
     peso_max_kg = 24.9 * (estatura_m ** 2)
     return round(peso_min_kg / 0.453592, 1), round(peso_max_kg / 0.453592, 1)
@@ -57,7 +58,7 @@ if not st.session_state.data.get("perfil_completado", False):
         peso = st.number_input("Peso (Libras)", min_value=50.0, max_value=600.0, value=160.0)
         
         st.write("🎯 Selecciona tus objetivos:")
-        objetivos = st.multiselect("Puedes elegir varios:", [
+        lista_objetivos = [
             "Ganar masa muscular (hipertrofia)", "Perder grasa corporal", "Aumentar fuerza",
             "Mejorar resistencia cardiovascular", "Tonificar el cuerpo", "Mejorar movilidad y flexibilidad",
             "Reducir el estrés", "Dormir mejor", "Mejorar salud cardiovascular", "Prevenir lesiones",
@@ -66,7 +67,8 @@ if not st.session_state.data.get("perfil_completado", False):
             "Marcar abdomen", "Aumentar glúteos o piernas", "Definir brazos y hombros", "Mejorar postura",
             "Crear rutina constante", "Aprender técnica correcta", "Mantener consistencia",
             "Desarrollar disciplina", "Bajar peso en tiempo específico", "Levantar peso clave"
-        ])
+        ]
+        objetivos = st.multiselect("Puedes elegir varios:", lista_objetivos)
 
         enviado = st.form_submit_button("Guardar mi perfil")
 
@@ -74,7 +76,6 @@ if not st.session_state.data.get("perfil_completado", False):
             if not nombre:
                 st.error("Por favor, ingresa tu nombre.")
             else:
-                # Convertir estatura a metros para cálculos
                 estatura_m = ((pies * 12) + pulgadas) * 0.0254
                 st.session_state.data["user"] = {
                     "nombre": nombre,
@@ -89,24 +90,36 @@ if not st.session_state.data.get("perfil_completado", False):
                 guardar_todo(st.session_state.data)
                 st.rerun()
 
-# --- PANTALLA PRINCIPAL (RESULTADOS DEL PERFIL) ---
+# --- PANTALLA PRINCIPAL (RESULTADOS) ---
 else:
-    u = st.session_state.data["user"]
-    st.title(f"Hola, {u['nombre']} 👋")
+    u = st.session_state.data.get("user", {})
     
-    # Cálculos en tiempo real
-    imc_actual = calcular_imc(u['peso_lb'], u['estatura_m'])
+    # PROTECCIÓN CONTRA KEYERROR: Busca 'peso_lb' o 'peso' (compatible con datos viejos)
+    peso_actual = u.get("peso_lb", u.get("peso", 160.0))
+    estatura_m = u.get("estatura_m", 1.70)
+    nombre_u = u.get("nombre", "Usuario")
+
+    st.title(f"Hola, {nombre_u} 👋")
+    
+    # Cálculos
+    imc_actual = calcular_imc(peso_actual, estatura_m)
     estado = clasificar_imc(imc_actual)
-    p_min, p_max = obtener_peso_ideal(u['estatura_m'])
+    p_min, p_max = obtener_peso_ideal(estatura_m)
 
     st.subheader("📊 Análisis de composición")
     
-    c1, c2 = st.columns(2)
-    c1.metric("Tu IMC", f"{imc_actual}")
-    c2.metric("Estado de peso", estado)
+    col_imc, col_estado = st.columns(2)
+    col_imc.metric("Tu IMC", f"{imc_actual}")
+    col_estado.metric("Estado de peso", estado)
 
-    st.info(f"💡 Según tu altura, tu peso ideal debería estar entre **{p_min}** y **{p_max} lbs**.")
+    st.success(f"💡 Tu peso ideal según tu estatura es de **{p_min}** a **{p_max} lbs**.")
 
+    # Mostrar objetivos guardados (solo para confirmar que se grabaron bien)
+    with st.expander("Ver mis objetivos seleccionados"):
+        for obj in u.get("objetivos", []):
+            st.write(f"✅ {obj}")
+
+    st.divider()
     if st.button("Reiniciar perfil (Borrar todo)"):
         st.session_state.data = {"perfil_completado": False, "user": {}}
         guardar_todo(st.session_state.data)
