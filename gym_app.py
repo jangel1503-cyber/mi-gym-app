@@ -102,41 +102,108 @@ def calcular_macros(u):
     
     return round(target), round(prot), round(grasas), round(carbs)
 
-# --- MOTOR DE RUTINA IA ---
-def generar_rutina_ia(objetivos, peso_lb):
-    # Lógica de intensidad basada en objetivos físicos o estéticos
+# --- MOTOR DE RUTINA IA v2 ---
+EJERCICIOS_AVANZADOS = {
+    "Pecho": [
+        {"nombre": "Press de Banca", "tip": "Baja la barra hasta el pecho con control."},
+        {"nombre": "Aperturas con Mancuernas", "tip": "Siente el estiramiento en las fibras del pectoral."},
+        {"nombre": "Flexiones de Brazos", "tip": "Mantén el core activado y la espalda recta."}
+    ],
+    "Espalda": [
+        {"nombre": "Remo con Barra", "tip": "Lleva el ombligo hacia atrás y junta las escápulas."},
+        {"nombre": "Jalón al Pecho", "tip": "Tira desde los codos, no solo con las manos."},
+        {"nombre": "Dominadas", "tip": "Cruza los pies y mantén el pecho alto."}
+    ],
+    "Piernas": [
+        {"nombre": "Sentadillas", "tip": "Baja la cadera por debajo de las rodillas si puedes."},
+        {"nombre": "Prensa de Piernas", "tip": "No bloquees las rodillas al extender."},
+        {"nombre": "Peso Muerto Rumano", "tip": "Siente el estiramiento en los isquiotibiales."},
+        {"nombre": "Zancadas", "tip": "Mantén el equilibrio y el torso erguido."}
+    ],
+    "Brazos": [
+        {"nombre": "Curl de Bíceps", "tip": "No balancees el cuerpo, solo mueve los antebrazos."},
+        {"nombre": "Press Francés", "tip": "Mantén los codos cerrados y apuntando al techo."},
+        {"nombre": "Martillo", "tip": "Excelente para el braquial y antebrazo."}
+    ],
+    "Hombros": [
+        {"nombre": "Press Militar", "tip": "Empuja la barra sobre tu cabeza de forma explosiva."},
+        {"nombre": "Elevaciones Laterales", "tip": "No subas más allá de la altura de los hombros."},
+        {"nombre": "Face Pulls", "tip": "Ideal para la salud del hombro y postura."}
+    ],
+    "Core/Postura": [
+        {"nombre": "Plancha Abdominal", "tip": "No dejes que la cadera se caiga."},
+        {"nombre": "Bird-Dog", "tip": "Mejora la estabilidad lumbar y coordinación."},
+        {"nombre": "Deadbug", "tip": "Mantén la espalda baja pegada al suelo."},
+        {"nombre": "Rueda Abdominal", "tip": "Extiende hasta donde controles tu espalda."}
+    ],
+    "Cardio/Funcional": [
+        {"nombre": "Burpees", "tip": "El ejercicio total para quemar grasa."},
+        {"nombre": "Mountain Climbers", "tip": "Velocidad constante y espalda estable."},
+        {"nombre": "Salto a la Comba", "tip": "Mantén los saltos cortos y elásticos."},
+        {"nombre": "Caminata Inclinada", "tip": "Quema grasa sin impacto articular."}
+    ]
+}
+
+def generar_rutina_ia(u):
+    objetivos = u.get('objetivos', [])
+    peso_lb = u.get('peso_lb', 160)
+    edad = u.get('edad', 25)
+    
+    # Análisis de perfil
     es_intenso = any("masa" in obj.lower() or "fuerza" in obj.lower() or "glúteos" in obj.lower() for obj in objetivos)
-    series = 4 if es_intenso else 3
+    enfasis_cardio = any("grasa" in obj.lower() or "resistencia" in obj.lower() or "correr" in obj.lower() for obj in objetivos)
+    enfasis_core = any("abdomen" in obj.lower() or "postura" in obj.lower() or "columna" in obj.lower() for obj in objetivos)
+    
+    # Volumen adaptativo por edad
+    series = 4 if es_intenso and edad < 45 else 3
     reps = "8-12" if es_intenso else "12-15"
-    
-    ejercicios_db = {
-        "Pecho/Hombros": ["Press de Banca", "Press Militar", "Aperturas"],
-        "Espalda/Brazos": ["Remo con barra", "Jalón al pecho", "Curl de Bíceps"],
-        "Piernas": ["Sentadillas", "Prensa", "Peso Muerto Rumano"],
-        "Funcional/Cardio": ["Burpees", "Caminata Inclinada", "Plancha"]
-    }
-    
-    dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
-    rutina = {}
-    
+    if edad > 55: reps = "15-20" # Menos carga, más reps para proteger
+
     distribucion = {
         "Lunes": "Pecho/Hombros",
         "Martes": "Piernas",
-        "Miércoles": "Descanso activo",
+        "Miércoles": "Descanso Activo",
         "Jueves": "Espalda/Brazos",
-        "Viernes": "Funcional/Cardio"
+        "Viernes": "Híbrido/Funcional"
     }
 
+    rutina = {}
     for dia, enfoque in distribucion.items():
         if "Descanso" in enfoque:
-            rutina[dia] = "Día de recuperación: Estiramientos o caminata ligera."
-        else:
-            ej_dia = []
-            for e in ejercicios_db.get(enfoque, []):
-                # Peso sugerido basado en el 30% del peso corporal como base
-                libras = round(peso_lb * random.uniform(0.25, 0.45), 0)
-                ej_dia.append({"ejercicio": e, "series": series, "reps": reps, "libras": libras})
-            rutina[dia] = ej_dia
+            rutina[dia] = "Día de recuperación: Estiramientos dinámicos o 30 min de caminata ligera."
+            continue
+            
+        ejercicios_dia = []
+        # Selección de grupos según enfoque
+        grupos = enfoque.split("/")
+        for g in grupos:
+            pool = []
+            if g == "Pecho": pool = EJERCICIOS_AVANZADOS["Pecho"]
+            elif g == "Hombros": pool = EJERCICIOS_AVANZADOS["Hombros"]
+            elif g == "Piernas": pool = EJERCICIOS_AVANZADOS["Piernas"]
+            elif g == "Espalda": pool = EJERCICIOS_AVANZADOS["Espalda"]
+            elif g == "Brazos": pool = EJERCICIOS_AVANZADOS["Brazos"]
+            elif g == "Híbrido" or g == "Funcional": pool = EJERCICIOS_AVANZADOS["Cardio/Funcional"]
+            
+            if pool:
+                num_ej = 2 if len(grupos) > 1 else 4
+                seleccion = random.sample(pool, min(len(pool), num_ej))
+                for s in seleccion:
+                    libras = round(peso_lb * random.uniform(0.20, 0.40), 0)
+                    ejercicios_dia.append({
+                        "ejercicio": s["nombre"], 
+                        "series": series, "reps": reps, 
+                        "libras": libras, "tip": s["tip"]
+                    })
+        
+        # Inyección de Core/Postura si aplica
+        if enfasis_core and dia in ["Martes", "Viernes"]:
+            c = random.choice(EJERCICIOS_AVANZADOS["Core/Postura"])
+            ejercicios_dia.append({
+                "ejercicio": c["nombre"], "series": 3, "reps": "15-20", "libras": 0, "tip": c["tip"]
+            })
+            
+        rutina[dia] = ejercicios_dia
     return rutina
 
 # --- INTERFAZ ---
@@ -170,7 +237,7 @@ if not st.session_state.data.get("perfil_completado", False):
                     "edad": edad
                 }
                 st.session_state.data["perfil_completado"] = True
-                st.session_state.data["rutina_semanal"] = generar_rutina_ia(objs, peso)
+                st.session_state.data["rutina_semanal"] = generar_rutina_ia(st.session_state.data["user"])
                 guardar_todo(st.session_state.data)
                 st.rerun()
             else:
@@ -236,8 +303,12 @@ else:
                     for i, ej in enumerate(ejercicios):
                         st.markdown(f"""
                             <div class="exercise-card">
-                                <strong>{ej['ejercicio']}</strong><br>
-                                <small>Configuración actual: {ej['series']} series x {ej['reps']} reps @ {ej['libras']} lbs</small>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <strong>{ej['ejercicio']}</strong>
+                                    <span title="{ej.get('tip', '')}" style="cursor:help;">💡 Tip</span>
+                                </div>
+                                <small style="color: #bbb;">{ej.get('tip', 'Mantén la técnica correcta.')}</small><br>
+                                <small>Actual: {ej['series']} x {ej['reps']} @ {ej['libras']} lbs</small>
                             </div>
                         """, unsafe_allow_html=True)
                         
@@ -321,6 +392,13 @@ else:
                 }
                 guardar_todo(st.session_state.data)
                 st.rerun()
+
+        st.markdown("---")
+        if st.button("🔄 Regenerar Rutina Inteligente", help="Crea una nueva rutina basada en tus objetivos actuales"):
+            st.session_state.data["rutina_semanal"] = generar_rutina_ia(u)
+            guardar_todo(st.session_state.data)
+            st.success("¡Nueva rutina generada con IA!")
+            st.rerun()
 
     if st.sidebar.button("⚠️ Reiniciar App"):
         st.session_state.data = {"perfil_completado": False, "user": {}, "rutina_semanal": {}}
