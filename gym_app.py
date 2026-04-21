@@ -34,57 +34,32 @@ def cargar_todo():
 if 'data' not in st.session_state:
     st.session_state.data = cargar_todo()
 
-# --- EXTRACCIÓN SEGURA ---
+# --- EXTRACCIÓN DE DATOS ---
 user_data = st.session_state.data.get("user", {})
 u_nombre = user_data.get("nombre", "Usuario")
-u_edad = user_data.get("edad", 0)
+u_edad = user_data.get("edad", 25)
 u_imc = user_data.get("imc", 0)
-u_peso = user_data.get("peso", 0)
-u_estatura = user_data.get("estatura_m", 0)
+u_peso = user_data.get("peso", 160.0)
+u_estatura = user_data.get("estatura_m", 1.70)
+u_p_max = user_data.get("p_max_lb", 0)
 
-# --- PROTECCIÓN PARA MULTISELECT ---
-opciones_objetivos = ["Bajar de peso", "Tonificar", "Masa Muscular"]
-objetivos_guardados = user_data.get("objetivos", [])
-objetivos_validos = [obj for obj in objetivos_guardados if obj in opciones_objetivos]
-
-if u_edad == 0 or u_imc == 0 or u_peso == 0:
-    st.session_state.data["perfil_completado"] = False
-
-# --- PANTALLA 1: PERFIL ---
+# --- PANTALLA DE BIENVENIDA (SOLO SI ES LA PRIMERA VEZ) ---
 if not st.session_state.data["perfil_completado"]:
-    st.title("👤 Configura tu Perfil")
-    nombre = st.text_input("Nombre", value=u_nombre)
-    edad = st.number_input("Edad", 12, 90, value=25 if u_edad == 0 else u_edad)
-    
-    col1, col2, col3 = st.columns(3)
-    with col1: p_lb = st.number_input("Peso (Lbs)", 50.0, 500.0, 160.0 if u_peso == 0 else u_peso)
-    with col2: pies = st.number_input("Pies", 3, 8, 5)
-    with col3: pulgadas = st.number_input("Pulgadas", 0, 11, 7)
-    
-    est_m = ((pies * 12) + pulgadas) * 0.0254
-    imc_calc = (p_lb * 0.453592) / (est_m ** 2) if est_m > 0 else 0
-    
-    # Cálculo de Peso Ideal Máximo (IMC 24.9) para evitar el KeyError posterior
-    p_max_kg = 24.9 * (est_m ** 2)
-    p_max_lb = p_max_kg / 0.453592
+    st.title("👋 ¡Bienvenido a Gym Pro AI!")
+    st.write("Para empezar, necesitamos configurar tus datos básicos.")
+    if st.button("Configurar mi Perfil ahora"):
+        st.session_state.data["perfil_completado"] = True # Marcamos como true para entrar al panel, pero lo mandaremos a la pestaña perfil
+        guardar_todo(st.session_state.data)
+        st.rerun()
 
-    objs = st.multiselect("Objetivos", opciones_objetivos, default=objetivos_validos)
-
-    if st.button("Guardar y Recalcular todo"):
-        st.session_state.data["user"] = {
-            "nombre": nombre, "edad": edad, "peso": p_lb, "estatura_m": est_m, 
-            "imc": round(imc_calc, 1), "objetivos": objs,
-            "p_max_lb": round(p_max_lb, 1) # Guardamos esto para la IA
-        }
-        st.session_state.data["perfil_completado"] = True
-        guardar_todo(st.session_state.data); st.rerun()
-
-# --- PANTALLA PRINCIPAL ---
+# --- PANEL PRINCIPAL ---
 else:
-    st.title(f"💪 Panel de {u_nombre}")
+    st.title(f"Gym Pro AI - {u_nombre}")
     
-    tab1, tab2, tab3 = st.tabs(["📅 Rutina", "📊 Progreso", "🔮 Super IA"])
+    # Creamos las 4 pestañas, incluyendo la nueva de Perfil
+    tab1, tab2, tab3, tab4 = st.tabs(["📅 Rutina", "📊 Progreso", "🔮 Super IA", "👤 Perfil"])
 
+    # --- TAB 1: RUTINA ---
     with tab1:
         with st.expander("➕ Crear nuevo ejercicio"):
             n_ej = st.text_input("Nombre Ejercicio")
@@ -118,10 +93,11 @@ else:
                 st.session_state.data["rutinas"].append({"dia": dia, "ejercicio": ej_sel, "grupo": biblioteca.get(ej_sel), "detalles": detalles_temp})
                 guardar_todo(st.session_state.data); st.rerun()
 
+    # --- TAB 2: PROGRESO ---
     with tab2:
-        st.header("Tu Plan Semanal")
+        st.header("Historial Semanal")
         rutinas = st.session_state.data.get("rutinas", [])
-        if not rutinas: st.info("Aún no tienes ejercicios registrados esta semana.")
+        if not rutinas: st.info("No hay ejercicios registrados.")
         else:
             for d in ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]:
                 filtro = [x for x in rutinas if x["dia"] == d]
@@ -134,67 +110,72 @@ else:
                                 st.write(f"💪 **{it['ejercicio']}** ({it['grupo']})")
                                 res = " | ".join([f"S{s['serie']}: {s['reps']}x{s['peso']}lb" for s in it['detalles']])
                                 st.caption(res)
-            if st.button("🗑️ Borrar Semana"):
+            if st.button("🗑️ Limpiar Todo"):
                 st.session_state.data["rutinas"] = []; guardar_todo(st.session_state.data); st.rerun()
 
+    # --- TAB 3: SUPER IA ---
     with tab3:
-        st.header("🔮 Inteligencia Artificial")
-        
-        # Cálculos de Composición Corporal
-        pk = u_peso * 0.453592
-        grasa = (1.20 * u_imc) + (0.23 * u_edad) - 16.2
-        mm = pk * (1 - (max(0, grasa)/100))
-        
-        st.subheader("⚖️ Composición Corporal")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Grasa Est.", f"{grasa:.1f}%")
-        c2.metric("Masa Magra", f"{mm:.1f} kg")
-        c3.metric("Agua/Día", f"{(u_peso * 0.6) / 33.8:.1f} L")
-
-        # --- SOLUCIÓN AL KEYERROR ---
-        p_meta = user_data.get("p_max_lb", 0)
-        if p_meta > 0 and u_peso > p_meta:
-            st.warning(f"⚖️ **Meta:** Tu peso ideal máximo es {p_meta} lbs. Te faltan {u_peso - p_meta:.1f} lbs.")
-
-        st.divider()
-
+        st.header("🔮 Análisis Inteligente")
         rutinas_ia = st.session_state.data.get("rutinas", [])
+        
         if not rutinas_ia:
-            st.warning("Registra ejercicios para ver tus proyecciones de recuperación y carga.")
+            st.warning("Completa tu rutina para activar el análisis de IA.")
         else:
-            st.subheader("🔋 Estado de Recuperación")
-            idx_hoy = datetime.now().weekday()
-            dias_ref = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-            recup_status = {}
             vol_total = 0
-            
             for r in rutinas_ia:
                 if not r.get("es_cardio"):
-                    g = r["grupo"]
-                    v = sum([s['reps'] * s['peso'] for s in r['detalles']])
-                    vol_total += v
-                    diff = (idx_hoy - dias_ref.index(r["dia"])) % 7
-                    recup_status[g] = "🔴 Recuperando" if diff < 2 else "🟢 Listo"
+                    vol_total += sum([s['reps'] * s['peso'] for s in r['detalles']])
             
-            if recup_status:
-                cols_r = st.columns(len(recup_status))
-                for i, (m, s) in enumerate(recup_status.items()):
-                    cols_r[i].write(f"**{m}**\n{s}")
+            st.subheader("🚀 Proyecciones")
+            st.write(f"Volumen de carga actual: **{vol_total:.0f} lbs**")
+            st.write(f"Meta sugerida (Sobrecarga progresiva): **{vol_total * 1.05:.0f} lbs**")
 
-            st.divider()
-            st.subheader("🚀 Proyecciones de Rendimiento")
-            col_izq, col_der = st.columns(2)
-            with col_izq:
-                st.write("**📈 Volumen Próximo Mes:**")
-                st.write(f"Carga estimada: **{vol_total * 1.10:.0f} lbs**")
-            with col_der:
-                lista_i = [x['inclinacion'] for x in rutinas_ia if x.get("es_cardio")]
-                if lista_i:
-                    horas_q = 5 if max(lista_i) > 8 else 2
-                    st.write(f"**🔥 Efecto EPOC:**")
-                    st.write(f"**{horas_q} horas** extras de quema.")
+    # --- TAB 4: PERFIL (TU NUEVA SECCIÓN) ---
+    with tab4:
+        st.header("👤 Mi Perfil y Datos Físicos")
+        
+        # Mostrar métricas actuales en tarjetas bonitas
+        c1, c2, c3 = st.columns(3)
+        c1.metric("IMC Actual", f"{u_imc}")
+        c2.metric("Peso", f"{u_peso} lbs")
+        c3.metric("Meta Máxima", f"{u_p_max} lbs")
 
-    st.divider()
-    if st.button("⚙️ Editar Perfil / Actualizar Peso"):
-        st.session_state.data["perfil_completado"] = False
-        guardar_todo(st.session_state.data); st.rerun()
+        st.divider()
+        
+        # Formulario de edición dentro de la pestaña
+        with st.expander("✏️ Editar mis datos y medidas"):
+            nuevo_nombre = st.text_input("Nombre", value=u_nombre)
+            nueva_edad = st.number_input("Edad", 12, 90, value=u_edad)
+            
+            col_p, col_pies, col_pulg = st.columns(3)
+            nuevo_p = col_p.number_input("Peso (Lbs)", 50.0, 500.0, value=float(u_peso))
+            
+            # Re-calculamos pies/pulgadas para el input basándonos en metros (aprox)
+            pies_val = int((u_estatura / 0.0254) // 12)
+            pulg_val = int((u_estatura / 0.0254) % 12)
+            
+            nuevo_pies = col_pies.number_input("Pies", 3, 8, value=pies_val)
+            nueva_pulg = col_pulg.number_input("Pulgadas", 0, 11, value=pulg_val)
+            
+            # Cálculos en tiempo real
+            est_m = ((nuevo_pies * 12) + nueva_pulg) * 0.0254
+            imc_calc = round((nuevo_p * 0.453592) / (est_m ** 2), 1) if est_m > 0 else 0
+            p_max_lb = round((24.9 * (est_m ** 2)) / 0.453592, 1)
+
+            if st.button("Actualizar mi información"):
+                st.session_state.data["user"] = {
+                    "nombre": nuevo_nombre, "edad": nueva_edad, "peso": nuevo_p, 
+                    "estatura_m": est_m, "imc": imc_calc, "p_max_lb": p_max_lb
+                }
+                guardar_todo(st.session_state.data)
+                st.success("¡Datos actualizados!")
+                st.rerun()
+
+        # Detalle informativo del IMC
+        st.subheader("ℹ️ Detalles de composición")
+        if u_imc < 18.5: st.info("Estado: Bajo peso")
+        elif 18.5 <= u_imc < 25: st.success("Estado: Peso saludable")
+        elif 25 <= u_imc < 30: st.warning("Estado: Sobrepeso")
+        else: st.error("Estado: Obesidad")
+        
+        st.write(f"Tu estatura registrada es de **{u_estatura:.2f} metros**.")
