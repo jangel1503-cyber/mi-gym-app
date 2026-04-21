@@ -2,10 +2,14 @@ import streamlit as st
 import json
 import os
 import random
+import google.generativeai as genai
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="Gym Pro AI", page_icon="💪", layout="wide")
 DB_FILE = "gym_data.json"
+GEMINI_API_KEY = "AIzaSyB2KaHLEIebj5JQ99O_oG_k28vtSvcpRzA"
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-pro')
 
 
 
@@ -165,24 +169,98 @@ EJERCICIOS_AVANZADOS = {
     ]
 }
 
+@st.cache_data
+def generar_rutina_gemini(perfil_json):
+    """Consulta a Gemini para generar rutina personalizada"""
+    try:
+        prompt = f"""
+Eres un entrenador personal experto con 20 años de experiencia. Genera una rutina de entrenamiento personalizada.
+
+PERFIL DEL CLIENTE:
+{json.dumps(perfil_json, indent=2, ensure_ascii=False)}
+
+GENERA UNA RUTINA EN FORMATO JSON EXACTO (sin markdown, solo JSON válido):
+{{
+  "Lunes": [
+    {{
+      "ejercicio": "Nombre del ejercicio",
+      "series": 4,
+      "reps": "8-12",
+      "peso_recomendado_lb": 100,
+      "tip": "Consejo técnico específico para este cliente",
+      "razon_ia": "Por qué es ideal para este cliente (edad, sexo, objetivos)"
+    }}
+  ],
+  "Martes": [...],
+  "Miércoles": "string si es día de descanso",
+  "Jueves": [...],
+  "Viernes": [...]
+}}
+
+CONSIDERACIONES:
+- Edad: {perfil_json.get('edad')} años → Ajusta intensidad
+- Sexo: {perfil_json.get('sexo')} → Personaliza énfasis muscular
+- Objetivos: {', '.join(perfil_json.get('objetivos', [])[:3])}
+- Días: {perfil_json.get('dias_entreno')}/semana
+- Peso actual: {perfil_json.get('peso_lb')} lbs
+
+Solo retorna el JSON válido sin explicaciones adicionales.
+"""
+        response = model.generate_content(prompt)
+        respuesta_texto = response.text.strip()
+        
+        # Limpiar marcadores de código si existen
+        if respuesta_texto.startswith("```json"):
+            respuesta_texto = respuesta_texto[7:]
+        if respuesta_texto.startswith("```"):
+            respuesta_texto = respuesta_texto[3:]
+        if respuesta_texto.endswith("```"):
+            respuesta_texto = respuesta_texto[:-3]
+        
+        rutina_dict = json.loads(respuesta_texto.strip())
+        return rutina_dict
+    except Exception as e:
+        st.error(f"Error generando rutina con IA: {str(e)}")
+        return None
+
 def generar_rutina_ia(u):
+    """Genera rutina usando Gemini o fallback local"""
     objetivos = u.get('objetivos', [])
     peso_lb = u.get('peso_lb', 160)
     edad = u.get('edad', 25)
+    sexo = u.get('sexo', 'Masculino')
+    dias_e = u.get('dias_entreno', 5)
     
-    # Análisis de perfil
+    # Preparar perfil para IA
+    perfil = {
+        "nombre": u.get('nombre'),
+        "sexo": sexo,
+        "edad": edad,
+        "peso_lb": peso_lb,
+        "estatura_m": u.get('estatura_m', 1.70),
+        "objetivos": objetivos[:3],  # Top 3 objetivos
+        "dias_entreno": dias_e
+    }
+    
+    # Intentar con Gemini
+    with st.spinner("🤖 IA generando rutina personalizada..."):
+        rutina_ia = generar_rutina_gemini(json.dumps(perfil))
+    
+    if rutina_ia:
+        return rutina_ia
+    
+    # Fallback: Generar localmente si IA falla
     es_intenso = any("masa" in obj.lower() or "fuerza" in obj.lower() or "glúteos" in obj.lower() for obj in objetivos)
     enfasis_cardio = any("grasa" in obj.lower() or "resistencia" in obj.lower() or "correr" in obj.lower() for obj in objetivos)
-    enfasis_core = any("abdomen" in obj.lower() or "postura" in obj.lower() or "columna" in obj.lower() for obj in objetivos)
     
-    # Volumen adaptativo por edad
     series = 4 if es_intenso and edad < 45 else 3
     reps = "8-12" if es_intenso else "12-15"
-    if edad > 55: reps = "15-20" # Menos carga, más reps para proteger
+    if edad > 55: reps = "15-20"
 
     rutina = {}
     dias_e = u.get('dias_entreno', 5)
     
+    # Distribuir por días (fallback)
     if dias_e == 3:
         distribucion = {
             "Lunes": "Pecho/Espalda/Hombros",
@@ -226,7 +304,6 @@ def generar_rutina_ia(u):
                 num_ej = 2 if len(grupos) > 1 else 4
                 seleccion = random.sample(pool, min(len(pool), num_ej))
                 for s in seleccion:
-                    # Generar detalles por set
                     detalles_sets = []
                     libras_base = round(peso_lb * random.uniform(0.20, 0.40), 0)
                     for _ in range(series):
@@ -293,8 +370,7 @@ else:
             </div>
             <hr style="margin: 10px 0; border: 0.1px solid rgba(255,255,255,0.1);">
             <p class="sidebar-label">Perfil de Usuario</p>
-            <h3>👤 {u.get('nombre')}</h3>
-            <p>🎂 Edad: {u.get('edad', 'N/A')} años</p>
+            <h3>👤 {u.get('nombre')}</h3>            <p>⚧️ Sexo: {u.get('sexo', 'N/A')}</p>            <p>🎂 Edad: {u.get('edad', 'N/A')} años</p>
             <p>🎯 {u.get('objetivos')[0] if u.get('objetivos') else 'Sin objetivos'}</p>
         """, unsafe_allow_html=True)
         st.info(f"📍 Meta: {len(u.get('objetivos', []))} objetivos seleccionados.")
@@ -431,6 +507,7 @@ else:
         with st.form("edit_perfil"):
             st.markdown("#### 👤 Información Personal")
             n_nombre = st.text_input("Nombre", u.get('nombre'))
+            n_sexo = st.selectbox("Sexo", ["Masculino", "Femenino"], index=0 if u.get('sexo') == 'Masculino' else 1)
             
             st.markdown("#### 📏 Medidas y Frecuencia")
             n_peso = st.number_input("Peso (Lbs)", value=float(u.get('peso_lb', 160)))
@@ -448,7 +525,7 @@ else:
             if st.form_submit_button("✅ Actualizar mi Perfil", use_container_width=True):
                 est_m = ((n_pies * 12) + n_pulgadas) * 0.0254
                 nueva_data_user = {
-                    "nombre": n_nombre, "peso_lb": n_peso, "pies": n_pies, 
+                    "nombre": n_nombre, "sexo": n_sexo, "peso_lb": n_peso, "pies": n_pies, 
                     "pulgadas": n_pulgadas, "estatura_m": est_m, "objetivos": n_objs,
                     "edad": n_edad, "dias_entreno": n_dias
                 }
