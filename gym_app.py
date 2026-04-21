@@ -1,11 +1,13 @@
 import streamlit as st
 import json
 import os
+import random
 
-# --- CONFIGURACIÓN Y BASE DE DATOS ---
-st.set_page_config(page_title="Gym Pro AI", page_icon="💪")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="Gym Pro AI", page_icon="💪", layout="wide")
 DB_FILE = "gym_data.json"
 
+# --- PERSISTENCIA ---
 def guardar_todo(datos):
     with open(DB_FILE, "w", encoding='utf-8') as f:
         json.dump(datos, f, ensure_ascii=False, indent=4)
@@ -15,112 +17,142 @@ def cargar_todo():
         try:
             with open(DB_FILE, "r", encoding='utf-8') as f:
                 return json.load(f)
-        except:
-            pass
-    return {"perfil_completado": False, "user": {}}
+        except: pass
+    return {"perfil_completado": False, "user": {}, "rutina_semanal": {}}
 
 if 'data' not in st.session_state:
     st.session_state.data = cargar_todo()
 
-# --- LÓGICA DE CÁLCULOS ---
-def calcular_imc(peso_lb, estatura_m):
-    if estatura_m <= 0: return 0
-    peso_kg = peso_lb * 0.453592
-    imc = peso_kg / (estatura_m ** 2)
-    return round(imc, 1)
+# --- MOTOR DE INTELIGENCIA ---
+def generar_rutina_ia(objetivos, peso_lb):
+    ejercicios_db = {
+        "Pecho": ["Press de Banca", "Aperturas con mancuernas"],
+        "Espalda": ["Remo con barra", "Jalón al pecho"],
+        "Piernas": ["Sentadillas", "Prensa"],
+        "Hombros": ["Press Militar", "Elevaciones laterales"],
+        "Brazos": ["Curl de Bíceps", "Copa de Tríceps"],
+        "Cardio": ["Caminata Inclinada", "Bicicleta"],
+        "Abdomen": ["Plancha", "Crunches"]
+    }
+    
+    dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
+    rutina = {}
+    es_hipertrofia = any("masa" in obj.lower() or "fuerza" in obj.lower() for obj in objetivos)
+    series = 4 if es_hipertrofia else 3
+    reps = "8-12" if es_hipertrofia else "15-20"
+    
+    distribucion = {
+        "Lunes": ["Pecho", "Brazos"],
+        "Martes": ["Piernas"],
+        "Miércoles": ["Descanso"],
+        "Jueves": ["Espalda", "Hombros"],
+        "Viernes": ["Cardio", "Abdomen"]
+    }
 
-def clasificar_imc(imc):
-    if imc < 18.5: return "Bajo peso"
-    elif 18.5 <= imc <= 24.9: return "Peso normal"
-    elif 25.0 <= imc <= 29.9: return "Sobrepeso"
-    else: return "Obesidad"
+    for dia, grupos in distribucion.items():
+        if dia == "Miércoles":
+            rutina[dia] = "Descanso activo o estiramientos"
+        else:
+            ejercicios_dia = []
+            for g in grupos:
+                lista = ejercicios_db.get(g, ["Ejercicio General"])
+                for e in lista:
+                    libras_sugeridas = round(peso_lb * random.uniform(0.2, 0.4), 0)
+                    ejercicios_dia.append({
+                        "ejercicio": e, "grupo": g, "series": series, "reps": reps, "libras": libras_sugeridas
+                    })
+            rutina[dia] = ejercicios_dia
+    return rutina
 
-def obtener_peso_ideal(estatura_m):
-    if estatura_m <= 0: return 0, 0
-    peso_min_kg = 18.5 * (estatura_m ** 2)
-    peso_max_kg = 24.9 * (estatura_m ** 2)
-    return round(peso_min_kg / 0.453592, 1), round(peso_max_kg / 0.453592, 1)
-
-# --- PANTALLA DE REGISTRO (PRIMERA VEZ) ---
+# --- INTERFAZ DE REGISTRO INICIAL ---
 if not st.session_state.data.get("perfil_completado", False):
-    st.title("👋 Bienvenido a Gym Pro AI")
-    st.write("Para empezar, necesitamos configurar tu perfil:")
-
-    with st.form("registro_perfil"):
-        nombre = st.text_input("¿Cómo te llamas?")
-        edad = st.number_input("Edad (años)", min_value=12, max_value=100, value=25)
-        
-        st.write("Estatura")
+    st.title("👋 Configuración Inicial de Perfil")
+    with st.form("registro"):
+        nombre = st.text_input("Nombre")
+        peso = st.number_input("Peso (Lbs)", 50.0, 500.0, 160.0)
         c1, c2 = st.columns(2)
-        pies = c1.number_input("Pies", min_value=3, max_value=8, value=5)
-        pulgadas = c2.number_input("Pulgadas", min_value=0, max_value=11, value=7)
+        pies = c1.number_input("Pies", 3, 8, 5)
+        pulgadas = c2.number_input("Pulgadas", 0, 11, 7)
         
-        peso = st.number_input("Peso (Libras)", min_value=50.0, max_value=600.0, value=160.0)
-        
-        st.write("🎯 Selecciona tus objetivos:")
-        lista_objetivos = [
+        lista_opciones = [
             "Ganar masa muscular (hipertrofia)", "Perder grasa corporal", "Aumentar fuerza",
-            "Mejorar resistencia cardiovascular", "Tonificar el cuerpo", "Mejorar movilidad y flexibilidad",
-            "Reducir el estrés", "Dormir mejor", "Mejorar salud cardiovascular", "Prevenir lesiones",
-            "Aumentar niveles de energía", "Correr más rápido", "Saltar más alto", 
-            "Prepararse para deporte específico", "Mejorar coordinación y equilibrio",
-            "Marcar abdomen", "Aumentar glúteos o piernas", "Definir brazos y hombros", "Mejorar postura",
-            "Crear rutina constante", "Aprender técnica correcta", "Mantener consistencia",
-            "Desarrollar disciplina", "Bajar peso en tiempo específico", "Levantar peso clave"
+            "Tonificar el cuerpo", "Mejorar salud cardiovascular", "Marcar abdomen"
         ]
-        objetivos = st.multiselect("Puedes elegir varios:", lista_objetivos)
+        objs = st.multiselect("Tus Objetivos", lista_opciones)
+        
+        if st.form_submit_button("Guardar y Generar Mi Plan"):
+            est_m = ((pies * 12) + pulgadas) * 0.0254
+            st.session_state.data["user"] = {
+                "nombre": nombre, "peso_lb": peso, "pies": pies, 
+                "pulgadas": pulgadas, "estatura_m": est_m, "objetivos": objs
+            }
+            st.session_state.data["perfil_completado"] = True
+            st.session_state.data["rutina_semanal"] = generar_rutina_ia(objs, peso)
+            guardar_todo(st.session_state.data)
+            st.rerun()
 
-        enviado = st.form_submit_button("Guardar mi perfil")
+# --- PANEL PRINCIPAL ---
+else:
+    st.title("Gym Pro AI - Mi Entrenamiento")
+    tab_rutina, tab_perfil = st.tabs(["📅 Mi Rutina", "👤 Mi Perfil"])
 
-        if enviado:
-            if not nombre:
-                st.error("Por favor, ingresa tu nombre.")
-            else:
-                estatura_m = ((pies * 12) + pulgadas) * 0.0254
+    # --- PESTAÑA 1: RUTINA (Edición y Visualización) ---
+    with tab_rutina:
+        st.subheader("Tu Plan Semanal Sugerido")
+        rutina = st.session_state.data.get("rutina_semanal", {})
+        
+        for dia, contenido in rutina.items():
+            with st.expander(f"📍 {dia.upper()}", expanded=(dia=="Lunes")):
+                if isinstance(contenido, str):
+                    st.write(f"✨ {contenido}")
+                else:
+                    for i, ej in enumerate(contenido):
+                        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+                        rutina[dia][i]['ejercicio'] = c1.text_input("Ejercicio", ej['ejercicio'], key=f"re_{dia}_{i}")
+                        rutina[dia][i]['series'] = c2.number_input("Series", 1, 10, int(ej['series']), key=f"rs_{dia}_{i}")
+                        rutina[dia][i]['reps'] = c3.text_input("Reps", ej['reps'], key=f"rr_{dia}_{i}")
+                        rutina[dia][i]['libras'] = c4.number_input("Lbs", 0.0, 1000.0, float(ej['libras']), key=f"rl_{dia}_{i}")
+        
+        if st.button("💾 Guardar Cambios en la Rutina"):
+            st.session_state.data["rutina_semanal"] = rutina
+            guardar_todo(st.session_state.data)
+            st.success("Rutina actualizada.")
+
+    # --- PESTAÑA 2: PERFIL (Edición Permanente) ---
+    with tab_perfil:
+        st.subheader("Configuración de mi Perfil")
+        u = st.session_state.data["user"]
+        
+        with st.form("editar_perfil"):
+            nuevo_nombre = st.text_input("Nombre", value=u['nombre'])
+            nuevo_peso = st.number_input("Peso (Lbs)", value=float(u['peso_lb']))
+            c1, c2 = st.columns(2)
+            n_pies = c1.number_input("Pies", 3, 8, value=int(u['pies']))
+            n_pulgadas = c2.number_input("Pulgadas", 0, 11, value=int(u['pulgadas']))
+            
+            lista_opciones = [
+                "Ganar masa muscular (hipertrofia)", "Perder grasa corporal", "Aumentar fuerza",
+                "Tonificar el cuerpo", "Mejorar salud cardiovascular", "Marcar abdomen"
+            ]
+            nuevos_objs = st.multiselect("Objetivos", lista_opciones, default=u['objetivos'])
+            
+            if st.form_submit_button("Actualizar mis Datos"):
+                est_m = ((n_pies * 12) + n_pulgadas) * 0.0254
                 st.session_state.data["user"] = {
-                    "nombre": nombre,
-                    "edad": edad,
-                    "pies": pies,
-                    "pulgadas": pulgadas,
-                    "estatura_m": estatura_m,
-                    "peso_lb": peso,
-                    "objetivos": objetivos
+                    "nombre": nuevo_nombre, "peso_lb": nuevo_peso, "pies": n_pies, 
+                    "pulgadas": n_pulgadas, "estatura_m": est_m, "objetivos": nuevos_objs
                 }
-                st.session_state.data["perfil_completado"] = True
                 guardar_todo(st.session_state.data)
+                st.success("¡Datos actualizados permanentemente!")
                 st.rerun()
 
-# --- PANTALLA PRINCIPAL (RESULTADOS) ---
-else:
-    u = st.session_state.data.get("user", {})
-    
-    # PROTECCIÓN CONTRA KEYERROR: Busca 'peso_lb' o 'peso' (compatible con datos viejos)
-    peso_actual = u.get("peso_lb", u.get("peso", 160.0))
-    estatura_m = u.get("estatura_m", 1.70)
-    nombre_u = u.get("nombre", "Usuario")
+        st.divider()
+        # Resumen informativo debajo del editor
+        peso_kg = u['peso_lb'] * 0.453592
+        imc = round(peso_kg / (u['estatura_m']**2), 1)
+        st.write(f"📊 **Resumen actual:** IMC de {imc} | {n_pies}'{n_pulgadas}'' | {nuevo_peso} lbs")
 
-    st.title(f"Hola, {nombre_u} 👋")
-    
-    # Cálculos
-    imc_actual = calcular_imc(peso_actual, estatura_m)
-    estado = clasificar_imc(imc_actual)
-    p_min, p_max = obtener_peso_ideal(estatura_m)
-
-    st.subheader("📊 Análisis de composición")
-    
-    col_imc, col_estado = st.columns(2)
-    col_imc.metric("Tu IMC", f"{imc_actual}")
-    col_estado.metric("Estado de peso", estado)
-
-    st.success(f"💡 Tu peso ideal según tu estatura es de **{p_min}** a **{p_max} lbs**.")
-
-    # Mostrar objetivos guardados (solo para confirmar que se grabaron bien)
-    with st.expander("Ver mis objetivos seleccionados"):
-        for obj in u.get("objetivos", []):
-            st.write(f"✅ {obj}")
-
-    st.divider()
-    if st.button("Reiniciar perfil (Borrar todo)"):
-        st.session_state.data = {"perfil_completado": False, "user": {}}
+    if st.sidebar.button("Borrar todo"):
+        st.session_state.data = {"perfil_completado": False, "user": {}, "rutina_semanal": {}}
         guardar_todo(st.session_state.data)
         st.rerun()
