@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 
 # Configuración
-st.set_page_config(page_title="Gym Pro AI", layout="centered")
+st.set_page_config(page_title="Gym Pro AI", layout="centered", page_icon="💪")
 
 # --- LÓGICA DE PERSISTENCIA ---
 DB_FILE = "gym_data.json"
@@ -40,11 +40,11 @@ u_nombre = user_data.get("nombre", "Usuario")
 u_edad = user_data.get("edad", 0)
 u_imc = user_data.get("imc", 0)
 u_peso = user_data.get("peso", 0)
+u_estatura = user_data.get("estatura_m", 0)
 
 # --- PROTECCIÓN PARA MULTISELECT ---
 opciones_objetivos = ["Bajar de peso", "Tonificar", "Masa Muscular"]
 objetivos_guardados = user_data.get("objetivos", [])
-# Solo dejamos los objetivos que sí existen en nuestra lista actual para evitar el error
 objetivos_validos = [obj for obj in objetivos_guardados if obj in opciones_objetivos]
 
 if u_edad == 0 or u_imc == 0 or u_peso == 0:
@@ -64,18 +64,22 @@ if not st.session_state.data["perfil_completado"]:
     est_m = ((pies * 12) + pulgadas) * 0.0254
     imc_calc = (p_lb * 0.453592) / (est_m ** 2) if est_m > 0 else 0
     
-    # Aquí ya usamos la lista filtrada 'objetivos_validos'
+    # Cálculo de Peso Ideal Máximo (IMC 24.9) para evitar el KeyError posterior
+    p_max_kg = 24.9 * (est_m ** 2)
+    p_max_lb = p_max_kg / 0.453592
+
     objs = st.multiselect("Objetivos", opciones_objetivos, default=objetivos_validos)
 
     if st.button("Guardar y Recalcular todo"):
         st.session_state.data["user"] = {
             "nombre": nombre, "edad": edad, "peso": p_lb, "estatura_m": est_m, 
-            "imc": round(imc_calc, 1), "objetivos": objs
+            "imc": round(imc_calc, 1), "objetivos": objs,
+            "p_max_lb": round(p_max_lb, 1) # Guardamos esto para la IA
         }
         st.session_state.data["perfil_completado"] = True
         guardar_todo(st.session_state.data); st.rerun()
 
-# --- EL RESTO DEL CÓDIGO SE MANTIENE IGUAL ---
+# --- PANTALLA PRINCIPAL ---
 else:
     st.title(f"💪 Panel de {u_nombre}")
     
@@ -83,13 +87,13 @@ else:
 
     with tab1:
         with st.expander("➕ Crear nuevo ejercicio"):
-            n_ej = st.text_input("Nombre")
+            n_ej = st.text_input("Nombre Ejercicio")
             g_ej = st.selectbox("Grupo", ["Pecho", "Espalda", "Piernas", "Hombros", "Bíceps", "Tríceps", "Abdomen", "Cardio"])
             if st.button("Guardar Ejercicio"):
                 st.session_state.data["biblioteca_personal"][n_ej] = g_ej
                 guardar_todo(st.session_state.data); st.rerun()
 
-        st.header("Registrar HOY")
+        st.header("Registrar Entrenamiento")
         dia = st.selectbox("Día", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
         biblioteca = st.session_state.data["biblioteca_personal"]
         ej_sel = st.selectbox("Ejercicio", list(biblioteca.keys()))
@@ -117,7 +121,7 @@ else:
     with tab2:
         st.header("Tu Plan Semanal")
         rutinas = st.session_state.data.get("rutinas", [])
-        if not rutinas: st.info("Sin registros.")
+        if not rutinas: st.info("Aún no tienes ejercicios registrados esta semana.")
         else:
             for d in ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]:
                 filtro = [x for x in rutinas if x["dia"] == d]
@@ -135,8 +139,8 @@ else:
 
     with tab3:
         st.header("🔮 Inteligencia Artificial")
-        rutinas_ia = st.session_state.data.get("rutinas", [])
         
+        # Cálculos de Composición Corporal
         pk = u_peso * 0.453592
         grasa = (1.20 * u_imc) + (0.23 * u_edad) - 16.2
         mm = pk * (1 - (max(0, grasa)/100))
@@ -147,10 +151,16 @@ else:
         c2.metric("Masa Magra", f"{mm:.1f} kg")
         c3.metric("Agua/Día", f"{(u_peso * 0.6) / 33.8:.1f} L")
 
+        # --- SOLUCIÓN AL KEYERROR ---
+        p_meta = user_data.get("p_max_lb", 0)
+        if p_meta > 0 and u_peso > p_meta:
+            st.warning(f"⚖️ **Meta:** Tu peso ideal máximo es {p_meta} lbs. Te faltan {u_peso - p_meta:.1f} lbs.")
+
         st.divider()
 
+        rutinas_ia = st.session_state.data.get("rutinas", [])
         if not rutinas_ia:
-            st.warning("Registra ejercicios para ver tus proyecciones.")
+            st.warning("Registra ejercicios para ver tus proyecciones de recuperación y carga.")
         else:
             st.subheader("🔋 Estado de Recuperación")
             idx_hoy = datetime.now().weekday()
@@ -172,19 +182,19 @@ else:
                     cols_r[i].write(f"**{m}**\n{s}")
 
             st.divider()
-            st.subheader("🚀 Rendimiento Futuro")
+            st.subheader("🚀 Proyecciones de Rendimiento")
             col_izq, col_der = st.columns(2)
             with col_izq:
-                st.write("**📈 Proyección a 90 días:**")
-                st.write(f"Carga: **{vol_total * 1.25:.0f} lbs**")
+                st.write("**📈 Volumen Próximo Mes:**")
+                st.write(f"Carga estimada: **{vol_total * 1.10:.0f} lbs**")
             with col_der:
                 lista_i = [x['inclinacion'] for x in rutinas_ia if x.get("es_cardio")]
                 if lista_i:
                     horas_q = 5 if max(lista_i) > 8 else 2
                     st.write(f"**🔥 Efecto EPOC:**")
-                    st.write(f"**{horas_q} horas** extras.")
+                    st.write(f"**{horas_q} horas** extras de quema.")
 
     st.divider()
-    if st.button("⚙️ Editar Perfil / Cambiar Peso"):
+    if st.button("⚙️ Editar Perfil / Actualizar Peso"):
         st.session_state.data["perfil_completado"] = False
         guardar_todo(st.session_state.data); st.rerun()
