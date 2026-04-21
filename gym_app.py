@@ -7,10 +7,7 @@ import random
 st.set_page_config(page_title="Gym Pro AI", page_icon="💪", layout="wide")
 DB_FILE = "gym_data.json"
 
-# Cargar CSS
-if os.path.exists("style.css"):
-    with open("style.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
 
 # --- LISTA MAESTRA DE OBJETIVOS (PROTEGIDA) ---
 LISTA_OBJETIVOS = [
@@ -113,40 +110,54 @@ EJERCICIOS_AVANZADOS = {
     "Pecho": [
         {"nombre": "Press de Banca", "tip": "Baja la barra hasta el pecho con control."},
         {"nombre": "Aperturas con Mancuernas", "tip": "Siente el estiramiento en las fibras del pectoral."},
-        {"nombre": "Flexiones de Brazos", "tip": "Mantén el core activado y la espalda recta."}
+        {"nombre": "Flexiones de Brazos", "tip": "Mantén el core activado y la espalda recta."},
+        {"nombre": "Press Inclinado", "tip": "Enfócate en la parte superior del pecho."},
+        {"nombre": "Fondos de Pecho", "tip": "Inclina el torso hacia adelante para activar el pectoral."}
     ],
     "Espalda": [
         {"nombre": "Remo con Barra", "tip": "Lleva el ombligo hacia atrás y junta las escápulas."},
         {"nombre": "Jalón al Pecho", "tip": "Tira desde los codos, no solo con las manos."},
-        {"nombre": "Dominadas", "tip": "Cruza los pies y mantén el pecho alto."}
+        {"nombre": "Dominadas", "tip": "Cruza los pies y mantén el pecho alto."},
+        {"nombre": "Remo en Polea Baja", "tip": "Mantén la espalda recta y no te balancees."},
+        {"nombre": "Peso Muerto Convencional", "tip": "Mantén la barra pegada a tus canillas."}
     ],
     "Piernas": [
         {"nombre": "Sentadillas", "tip": "Baja la cadera por debajo de las rodillas si puedes."},
         {"nombre": "Prensa de Piernas", "tip": "No bloquees las rodillas al extender."},
         {"nombre": "Peso Muerto Rumano", "tip": "Siente el estiramiento en los isquiotibiales."},
-        {"nombre": "Zancadas", "tip": "Mantén el equilibrio y el torso erguido."}
+        {"nombre": "Zancadas", "tip": "Mantén el equilibrio y el torso erguido."},
+        {"nombre": "Extensiones de Cuádriceps", "tip": "Controla el descenso en cada repetición."},
+        {"nombre": "Curl Femoral", "tip": "Aprieta los isquios en la parte superior del movimiento."}
     ],
     "Brazos": [
         {"nombre": "Curl de Bíceps", "tip": "No balancees el cuerpo, solo mueve los antebrazos."},
         {"nombre": "Press Francés", "tip": "Mantén los codos cerrados y apuntando al techo."},
-        {"nombre": "Martillo", "tip": "Excelente para el braquial y antebrazo."}
+        {"nombre": "Martillo", "tip": "Excelente para el braquial y antebrazo."},
+        {"nombre": "Extensiones en Polea", "tip": "Extiende el brazo completamente para máxima contracción."},
+        {"nombre": "Curl Predicador", "tip": "Aísla el bíceps evitando usar los hombros."}
     ],
     "Hombros": [
         {"nombre": "Press Militar", "tip": "Empuja la barra sobre tu cabeza de forma explosiva."},
         {"nombre": "Elevaciones Laterales", "tip": "No subas más allá de la altura de los hombros."},
-        {"nombre": "Face Pulls", "tip": "Ideal para la salud del hombro y postura."}
+        {"nombre": "Face Pulls", "tip": "Ideal para la salud del hombro y postura."},
+        {"nombre": "Press Arnold", "tip": "Gira las palmas mientras subes para mayor rango."},
+        {"nombre": "Pájaros (Hombro Posterior)", "tip": "Lucha por mantener los codos arriba."}
     ],
     "Core/Postura": [
         {"nombre": "Plancha Abdominal", "tip": "No dejes que la cadera se caiga."},
         {"nombre": "Bird-Dog", "tip": "Mejora la estabilidad lumbar y coordinación."},
         {"nombre": "Deadbug", "tip": "Mantén la espalda baja pegada al suelo."},
-        {"nombre": "Rueda Abdominal", "tip": "Extiende hasta donde controles tu espalda."}
+        {"nombre": "Rueda Abdominal", "tip": "Extiende hasta donde controles tu espalda."},
+        {"nombre": "Elevación de Piernas", "tip": "No balancees las piernas, controla el movimiento."},
+        {"nombre": "Russian Twists", "tip": "Gira el torso, no solo los brazos."}
     ],
     "Cardio/Funcional": [
         {"nombre": "Burpees", "tip": "El ejercicio total para quemar grasa."},
         {"nombre": "Mountain Climbers", "tip": "Velocidad constante y espalda estable."},
         {"nombre": "Salto a la Comba", "tip": "Mantén los saltos cortos y elásticos."},
-        {"nombre": "Caminata Inclinada", "tip": "Quema grasa sin impacto articular."}
+        {"nombre": "Caminata Inclinada", "tip": "Quema grasa sin impacto articular."},
+        {"nombre": "Kettlebell Swings", "tip": "Potencia desde la cadera, no los brazos."},
+        {"nombre": "Box Jumps", "tip": "Aterriza suavemente para proteger tus rodillas."}
     ]
 }
 
@@ -211,11 +222,17 @@ def generar_rutina_ia(u):
                 num_ej = 2 if len(grupos) > 1 else 4
                 seleccion = random.sample(pool, min(len(pool), num_ej))
                 for s in seleccion:
-                    libras = round(peso_lb * random.uniform(0.20, 0.40), 0)
+                    # Generar detalles por set
+                    detalles_sets = []
+                    libras_base = round(peso_lb * random.uniform(0.20, 0.40), 0)
+                    for _ in range(series):
+                        detalles_sets.append({"reps": reps, "libras": libras_base})
+
                     ejercicios_dia.append({
                         "ejercicio": s["nombre"], 
-                        "series": series, "reps": reps, 
-                        "libras": libras, "tip": s["tip"]
+                        "series": series,
+                        "detalles_sets": detalles_sets,
+                        "tip": s["tip"]
                     })
         rutina[dia] = ejercicios_dia
     return rutina
@@ -316,6 +333,12 @@ else:
                     st.info(ejercicios)
                 else:
                     for i, ej in enumerate(ejercicios):
+                        # Asegurar compatibilidad con datos antiguos
+                        if 'detalles_sets' not in ej:
+                            old_reps = ej.get('reps', '12')
+                            old_lbs = ej.get('libras', 0)
+                            ej['detalles_sets'] = [{"reps": old_reps, "libras": old_lbs} for _ in range(int(ej.get('series', 3)))]
+
                         st.markdown(f"""
                             <div class="exercise-card">
                                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -323,15 +346,33 @@ else:
                                     <span title="{ej.get('tip', '')}" style="cursor:help;">💡 Tip</span>
                                 </div>
                                 <small style="color: #bbb;">{ej.get('tip', 'Mantén la técnica correcta.')}</small><br>
-                                <small>Actual: {ej['series']} x {ej['reps']} @ {ej['libras']} lbs</small>
+                                <small>Configuración: {ej['series']} sets totales</small>
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
-                        rutina[dia][i]['ejercicio'] = c1.text_input("Ejercicio", ej['ejercicio'], key=f"e_{dia}_{i}", label_visibility="collapsed")
-                        rutina[dia][i]['series'] = c2.number_input("Sets", 1, 10, int(ej['series']), key=f"s_{dia}_{i}")
-                        rutina[dia][i]['reps'] = c3.text_input("Reps", ej['reps'], key=f"r_{dia}_{i}")
-                        rutina[dia][i]['libras'] = c4.number_input("Lbs", 0.0, 1000.0, float(ej['libras']), key=f"l_{dia}_{i}")
+                        c1, c2 = st.columns([3, 1])
+                        rutina[dia][i]['ejercicio'] = c1.text_input("Ejercicio", ej['ejercicio'], key=f"e_{dia}_{i}")
+                        num_sets = c2.number_input("Sets totales", 1, 12, int(ej['series']), key=f"s_{dia}_{i}")
+                        rutina[dia][i]['series'] = num_sets
+                        
+                        # Ajustar lista de detalles si cambió el número de sets
+                        if len(ej['detalles_sets']) != num_sets:
+                            if len(ej['detalles_sets']) < num_sets:
+                                extra = num_sets - len(ej['detalles_sets'])
+                                last_val = ej['detalles_sets'][-1] if ej['detalles_sets'] else {"reps": "10", "libras": 0}
+                                for _ in range(extra):
+                                    ej['detalles_sets'].append(last_val.copy())
+                            else:
+                                ej['detalles_sets'] = ej['detalles_sets'][:num_sets]
+                        
+                        # Grid para editar reps y lbs de cada set
+                        st.markdown("###### Detalles por Set (Reps | Lbs)")
+                        for s_idx in range(num_sets):
+                            sc1, sc2, sc3 = st.columns([1, 2, 2])
+                            sc1.markdown(f"**Set {s_idx+1}**")
+                            ej['detalles_sets'][s_idx]['reps'] = sc2.text_input(f"Reps S{s_idx}", ej['detalles_sets'][s_idx]['reps'], key=f"r_{dia}_{i}_{s_idx}", label_visibility="collapsed")
+                            ej['detalles_sets'][s_idx]['libras'] = sc3.number_input(f"Lbs S{s_idx}", 0.0, 1000.0, float(ej['detalles_sets'][s_idx]['libras']), key=f"l_{dia}_{i}_{s_idx}", label_visibility="collapsed")
+                        st.markdown("---")
         
         if st.button("💾 Guardar Cambios en la Rutina"):
             st.session_state.data["rutina_semanal"] = rutina
@@ -401,12 +442,18 @@ else:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.form_submit_button("✅ Actualizar mi Perfil", use_container_width=True):
                 est_m = ((n_pies * 12) + n_pulgadas) * 0.0254
-                st.session_state.data["user"] = {
+                nueva_data_user = {
                     "nombre": n_nombre, "peso_lb": n_peso, "pies": n_pies, 
                     "pulgadas": n_pulgadas, "estatura_m": est_m, "objetivos": n_objs,
                     "edad": n_edad, "dias_entreno": n_dias
                 }
+                st.session_state.data["user"] = nueva_data_user
+                
+                # Actualización automática de la rutina al editar el perfil
+                st.session_state.data["rutina_semanal"] = generar_rutina_ia(nueva_data_user)
+                
                 guardar_todo(st.session_state.data)
+                st.success("¡Perfil y rutina actualizados con éxito!")
                 st.rerun()
 
         st.markdown("---")
@@ -416,7 +463,4 @@ else:
             st.success("¡Nueva rutina generada con IA!")
             st.rerun()
 
-    if st.sidebar.button("⚠️ Reiniciar App"):
-        st.session_state.data = {"perfil_completado": False, "user": {}, "rutina_semanal": {}}
-        guardar_todo(st.session_state.data)
-        st.rerun()
+
