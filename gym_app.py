@@ -62,7 +62,7 @@ else:
     tabs = st.tabs(["📅 Rutina", "📊 Progreso", "🔮 Super IA", "🏆 Logros", "👤 Perfil"])
     tab1, tab2, tab3, tab4, tab5 = tabs
 
-    # --- TAB 1: RUTINA (Con herramientas de uso en vivo) ---
+    # --- TAB 1: RUTINA ---
     with tab1:
         col_header, col_tools = st.columns([2, 1])
         with col_header:
@@ -125,22 +125,19 @@ else:
                 })
                 guardar_todo(st.session_state.data); st.rerun()
 
-    # --- TAB 2: PROGRESO (Historial y Medidas) ---
+    # --- TAB 2: PROGRESO ---
     with tab2:
         st.header("Evolución Física")
         with st.expander("📏 Registrar nuevas medidas corporales"):
             col_med1, col_med2 = st.columns(2)
             c_cintura = col_med1.number_input("Cintura (cm)", 40.0, 200.0, 80.0)
             c_brazo = col_med2.number_input("Brazo/Bíceps (cm)", 15.0, 70.0, 30.0)
-            c_pecho = col_med1.number_input("Pecho (cm)", 50.0, 250.0, 100.0)
-            c_muslo = col_med2.number_input("Muslo (cm)", 20.0, 150.0, 55.0)
             if st.button("Guardar Medidas"):
                 if "medidas" not in st.session_state.data: st.session_state.data["medidas"] = []
                 st.session_state.data["medidas"].append({
-                    "fecha": str(datetime.now().date()), "cintura": c_cintura, 
-                    "brazo": c_brazo, "pecho": c_pecho, "muslo": c_muslo
+                    "fecha": str(datetime.now().date()), "cintura": c_cintura, "brazo": c_brazo
                 })
-                guardar_todo(st.session_state.data); st.success("Medidas guardadas correctamente."); st.rerun()
+                guardar_todo(st.session_state.data); st.success("Medidas guardadas."); st.rerun()
 
         st.subheader("Resumen Semanal")
         rutinas_hist = st.session_state.data.get("rutinas", [])
@@ -153,27 +150,18 @@ else:
                     with st.expander(f"🗓️ {d_nombre.upper()}", expanded=False):
                         for item in items_dia:
                             if item.get("es_cardio"):
-                                st.write(f"🏃 **{item['ejercicio']}**: {item['minutos']} min | Inc: {item['inclinacion']}")
+                                st.write(f"🏃 **{item['ejercicio']}**: {item['minutos']} min")
                             else:
-                                st.write(f"💪 **{item['ejercicio']}** ({item['grupo']})")
-                                desc_series = " | ".join([f"S{s['serie']}: {s['reps']}x{s['peso']}lb" for s in item['detalles']])
-                                st.caption(desc_series)
-            if st.button("🗑️ Limpiar Historial Semanal"):
-                st.session_state.data["rutinas"] = []
-                guardar_todo(st.session_state.data); st.rerun()
+                                st.write(f"💪 **{item['ejercicio']}**")
+                                st.caption(" | ".join([f"S{s['serie']}: {s['reps']}x{s['peso']}lb" for s in item['detalles']]))
 
-    # --- TAB 3: SUPER IA (DETALLES COMPLETOS) ---
+    # --- TAB 3: SUPER IA (DETALLES RESTAURADOS) ---
     with tab3:
         st.header("🔮 Super IA: Análisis 360°")
-        
-        # 1. BIOMETRÍA Y METABOLISMO (Fórmulas avanzadas)
-        st.subheader("🧬 Perfil Metabólico y Biometría")
         peso_kg = u_peso * 0.453592
         altura_cm = u_estatura * 100
-        # Grasa estimada (Fórmula Deurenberg)
         grasa_est = (1.20 * u_imc) + (0.23 * u_edad) - 16.2
         masa_magra_kg = peso_kg * (1 - (max(0, grasa_est)/100))
-        # TMB (Mifflin-St Jeor)
         tmb_resultado = (10 * peso_kg) + (6.25 * altura_cm) - (5 * u_edad) + 5
         
         m1, m2, m3, m4 = st.columns(4)
@@ -182,166 +170,115 @@ else:
         m3.metric("Agua/Día", f"{(u_peso * 0.6) / 33.8:.1f} L")
         m4.metric("TMB (Calorías)", f"{tmb_resultado:.0f}")
 
-        # Análisis nutricional según objetivo
-        obj_act = u_objetivos[0] if u_objetivos else "Mantener"
-        if "Bajar" in obj_act:
-            cal_final = tmb_resultado * 1.2 - 500
-            st.info(f"🥗 **Estrategia IA:** Para perder grasa, consume **{cal_final:.0f} kcal**. Prioriza 2.0g de proteína por kg.")
-        elif "Masa" in obj_act or "Músculo" in obj_act:
-            cal_final = tmb_resultado * 1.2 + 300
-            st.info(f"🥩 **Estrategia IA:** Para ganar músculo, consume **{cal_final:.0f} kcal**. Prioriza carbohidratos complejos.")
-        else:
-            cal_final = tmb_resultado * 1.2
-            st.info(f"⚖️ **Estrategia IA:** Para mantenimiento, consume **{cal_final:.0f} kcal**.")
-
         st.divider()
-
-        # 2. ANÁLISIS DE FUERZA Y VOLUMEN (1RM)
-        st.subheader("📊 Análisis de Fuerza y Volumen de Carga")
         rutinas_ia = st.session_state.data.get("rutinas", [])
-        
         if not rutinas_ia:
-            st.warning("Sin registros de entrenamiento para generar proyecciones de fuerza.")
+            st.warning("Sin registros para análisis.")
         else:
-            fuerza_max_dict = {}
-            vol_total_semanal = 0
-            cal_quemadas_ejercicio = 0
-            
-            for r_ia in rutinas_ia:
-                if r_ia.get("es_cardio"):
-                    # Estimación simple de quema calórica
-                    cal_quemadas_ejercicio += r_ia["minutos"] * (8 + r_ia["inclinacion"]*0.5) * (peso_kg / 70)
-                else:
-                    v_ejer = sum([s['reps'] * s['peso'] for s in r_ia['detalles']])
-                    vol_total_semanal += v_ejer
-                    # Cálculo 1RM (Brzycki)
-                    mejor_serie = max(r_ia['detalles'], key=lambda x: x['peso'])
-                    if 1 < mejor_serie['reps'] <= 12:
-                        rm_calc = mejor_serie['peso'] * (36 / (37 - mejor_serie['reps']))
-                        if r_ia['ejercicio'] not in fuerza_max_dict or rm_calc > fuerza_max_dict[r_ia['ejercicio']]:
-                            fuerza_max_dict[r_ia['ejercicio']] = rm_calc
-
-            if fuerza_max_dict:
-                st.write("**💪 Fuerza Máxima Estimada (1RM):**")
-                cols_rm = st.columns(len(fuerza_max_dict) if len(fuerza_max_dict) < 5 else 4)
-                for idx, (nombre_e, val_rm) in enumerate(fuerza_max_dict.items()):
-                    cols_rm[idx % 4].metric(nombre_e, f"{val_rm:.1f} lb")
-            
-            st.write(f"🔥 **Gasto calórico estimado en gym:** ~{cal_quemadas_ejercicio:.0f} kcal.")
-            st.write(f"📈 **Volumen de carga total:** {vol_total_semanal:.0f} lbs. Meta de sobrecarga: **{(vol_total_semanal * 1.05):.0f} lbs**.")
-
-            st.divider()
-
-            # 3. ESTADO DEL SISTEMA NERVIOSO CENTRAL (SNC) Y RECUPERACIÓN
-            st.subheader("🔋 Estado de Recuperación y SNC")
-            dia_idx_hoy = datetime.now().weekday()
-            nombres_dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-            estado_recup = {}
-            
+            st.subheader("📊 Fuerza y Volumen")
+            fuerza_dict = {}
+            vol_total = 0
             for r_ia in rutinas_ia:
                 if not r_ia.get("es_cardio"):
-                    g_musc = r_ia["grupo"]
-                    dias_pasados = (dia_idx_hoy - nombres_dias.index(r_ia["dia"])) % 7
-                    if g_musc not in estado_recup or dias_pasados < estado_recup[g_musc]:
-                        estado_recup[g_musc] = dias_pasados
+                    vol_total += sum([s['reps'] * s['peso'] for s in r_ia['detalles']])
+                    mejor = max(r_ia['detalles'], key=lambda x: x['peso'])
+                    if 1 < mejor['reps'] <= 12:
+                        rm_c = mejor['peso'] * (36 / (37 - mejor['reps']))
+                        if r_ia['ejercicio'] not in fuerza_dict or rm_c > fuerza_dict[r_ia['ejercicio']]:
+                            fuerza_dict[r_ia['ejercicio']] = rm_c
             
-            if estado_recup:
-                cols_snc = st.columns(len(estado_recup) if len(estado_recup) < 5 else 4)
-                for idx_s, (g_m, d_p) in enumerate(estado_recup.items()):
-                    if d_p == 0: st_texto, st_color = "🔴 Fatiga Alta", "red"
-                    elif d_p == 1: st_texto, st_color = "🟡 Recuperando", "orange"
-                    else: st_texto, st_color = "🟢 Listo", "green"
-                    cols_snc[idx_s % 4].markdown(f"**{g_m}**\n\n:{st_color}[{st_texto}]")
+            if fuerza_dict:
+                cols_rm = st.columns(min(len(fuerza_dict), 4))
+                for idx, (n_e, v_rm) in enumerate(fuerza_dict.items()):
+                    cols_rm[idx % 4].metric(n_e, f"{v_rm:.1f} lb")
             
-            st.divider()
-            
-            # 4. RECOMENDACIÓN INTELIGENTE FINAL
-            st.subheader("🤖 Recomendación de Próximo Paso")
-            musculos_ready = [m for m, d in estado_recup.items() if d >= 2]
-            if not estado_recup:
-                st.write("Inicia tu semana entrenando grupos grandes como Pecho o Piernas.")
-            elif musculos_ready:
-                st.success(f"Tus grupos musculares listos para máxima intensidad: **{', '.join(musculos_ready)}**.")
-            else:
-                st.warning("Muchos grupos musculares fatigados. Considera un día de descanso o cardio ligero para permitir la recuperación del SNC.")
+            st.write(f"📈 **Volumen Semanal:** {vol_total:.0f} lbs. Objetivo: **{(vol_total * 1.05):.0f} lbs**.")
 
-    # --- TAB 4: LOGROS (Rachas y PRs) ---
+            st.divider()
+            st.subheader("🔋 Estado de Recuperación (SNC)")
+            dia_hoy_idx = datetime.now().weekday()
+            dias_nom = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+            recuperacion = {}
+            for r_ia in rutinas_ia:
+                if not r_ia.get("es_cardio"):
+                    pasado = (dia_hoy_idx - dias_nom.index(r_ia["dia"])) % 7
+                    if r_ia["grupo"] not in recuperacion or pasado < recuperacion[r_ia["grupo"]]:
+                        recuperacion[r_ia["grupo"]] = pasado
+            
+            if recuperacion:
+                cols_r = st.columns(min(len(recuperacion), 4))
+                for i, (g, d) in enumerate(recuperacion.items()):
+                    est = "🔴 Fatiga" if d == 0 else "🟡 Recuperando" if d == 1 else "🟢 Listo"
+                    cols_r[i % 4].write(f"**{g}**\n{est}")
+
+    # --- TAB 4: LOGROS (CORREGIDA) ---
     with tab4:
         st.header("🏆 Salón de la Fama")
-        todas_rutinas = st.session_state.data.get("rutinas", [])
-        fechas_registradas = sorted(list(set([r["fecha"] for r in todas_rutinas if "fecha" in r])))
         
-        racha_num = 0
-        if fechas_registradas:
+        # Lógica de Racha
+        todas_las_rutinas = st.session_state.data.get("rutinas", [])
+        fechas_unicas = sorted(list(set([r["fecha"] for r in todas_las_rutinas if "fecha" in r])))
+        
+        racha_entreno = 0
+        if fechas_unicas:
             hoy_dt = datetime.now().date()
             cursor = hoy_dt
-            while str(cursor) in fechas_registradas:
-                racha_num += 1
+            while str(cursor) in fechas_unicas:
+                racha_entreno += 1
                 cursor -= timedelta(days=1)
         
-        st.metric("🔥 Racha de Entrenamiento", f"{racha_num} Días")
+        st.metric("🔥 Racha Actual", f"{racha_entreno} Días")
         
         st.divider()
-        st.subheader("🥇 Récords Personales (PR)")
-        pr_records = {}
-        for r_pr in todas_rutinas:
-            if not r_pr.get("es_cardio"):
-                nombre_pr = r_pr["ejercicio"]
-                max_peso_pr = max([s["peso"] for s in r_pr["detalles"]])
-                if nombre_pr not in pr_records or max_peso_pr > pr_records[nombre_pr]:
-                    pr_records[nombre_pr] = max_peso_pr
+        st.subheader("🥇 Mis Récords Personales (PR)")
         
-        if pr_records:
-            for n_pr, v_pr in pr_records.items():
-                st.write(f"⭐ **{n_pr}**: {v_pr} lbs")
+        mis_prs = {}
+        for r_pr in todas_las_rutinas:
+            if not r_pr.get("es_cardio"):
+                nombre_ej = r_pr["ejercicio"]
+                peso_max_sesion = max([s["peso"] for s in r_pr["detalles"]])
+                if nombre_ej not in mis_prs or peso_max_sesion > mis_prs[nombre_ej]:
+                    mis_prs[nombre_ej] = peso_max_sesion
+        
+        if mis_prs:
+            for ej, peso in mis_prs.items():
+                st.write(f"⭐ **{ej}**: {peso} lbs")
         else:
-            st.write("Aún no has registrado pesos máximos.")
+            st.info("Registra ejercicios con peso para ver tus récords aquí.")
 
-    # --- TAB 5: PERFIL (Visualización y Edición) ---
-    with tab4: # Nota: El usuario pidió visualizar datos aquí
-        pass # La lógica de abajo maneja la visualización en la pestaña Perfil
-
+    # --- TAB 5: PERFIL (CORREGIDA) ---
     with tab5:
-        st.header("👤 Mi Perfil y Datos Físicos")
+        st.header("👤 Mi Perfil")
         
         v1, v2, v3 = st.columns(3)
-        v1.metric("IMC Actual", f"{u_imc}")
+        v1.metric("IMC", f"{u_imc}")
         v2.metric("Peso", f"{u_peso} lbs")
-        v3.metric("Meta Máxima", f"{u_p_max} lbs")
+        v3.metric("Meta Máx", f"{u_p_max} lbs")
 
         st.divider()
-        
-        with st.expander("✏️ Editar mis datos y objetivos"):
-            ed_nombre = st.text_input("Nombre completo", value=u_nombre)
+        with st.expander("✏️ Editar mis datos"):
+            ed_nombre = st.text_input("Nombre", value=u_nombre)
             ed_edad = st.number_input("Edad", 12, 95, value=u_edad)
-            ed_peso = st.number_input("Peso actual (Lbs)", 50.0, 550.0, value=float(u_peso))
+            ed_peso = st.number_input("Peso (Lbs)", 50.0, 500.0, value=float(u_peso))
             
-            # Cálculo de pies/pulgadas desde metros
+            # Altura en pies/pulgadas para facilidad del usuario
             val_pies = int((u_estatura / 0.0254) // 12)
             val_pulg = int((u_estatura / 0.0254) % 12)
-            
             c_p1, c_p2 = st.columns(2)
-            ed_pies = c_p1.number_input("Estatura (Pies)", 3, 8, value=val_pies)
-            ed_pulg = c_p2.number_input("Estatura (Pulgadas)", 0, 11, value=val_pulg)
+            ed_pies = c_p1.number_input("Pies", 3, 8, value=val_pies)
+            ed_pulg = c_p2.number_input("Pulgadas", 0, 11, value=val_pulg)
             
-            ed_obj = st.multiselect("Tus Objetivos", 
-                                    ["Bajar de peso", "Ganar Masa Muscular", "Tonificar", "Resistencia", "Fuerza Pura"],
-                                    default=u_objetivos)
+            ed_obj = st.multiselect("Objetivos", ["Bajar de peso", "Ganar Masa Muscular", "Tonificar"], default=u_objetivos)
             
-            # Nuevos cálculos
-            est_m_final = ((ed_pies * 12) + ed_pulg) * 0.0254
-            imc_nuevo = round((ed_peso * 0.453592) / (est_m_final ** 2), 1) if est_m_final > 0 else 0
-            p_max_nuevo = round((24.9 * (est_m_final ** 2)) / 0.453592, 1)
-
-            if st.button("Actualizar Perfil"):
+            if st.button("Guardar Cambios"):
+                est_final = ((ed_pies * 12) + ed_pulg) * 0.0254
+                imc_n = round((ed_peso * 0.453592) / (est_final ** 2), 1)
+                p_m_n = round((24.9 * (est_final ** 2)) / 0.453592, 1)
+                
                 st.session_state.data["user"] = {
                     "nombre": ed_nombre, "edad": ed_edad, "peso": ed_peso, 
-                    "estatura_m": est_m_final, "imc": imc_nuevo, "p_max_lb": p_max_nuevo,
-                    "objetivos": ed_obj
+                    "estatura_m": est_final, "imc": imc_n, "p_max_lb": p_m_n, "objetivos": ed_obj
                 }
                 guardar_todo(st.session_state.data)
-                st.success("¡Perfil actualizado con éxito!")
+                st.success("¡Datos actualizados!")
                 st.rerun()
-
-        st.subheader("Estatura Registrada")
-        st.write(f"Mides actualmente **{u_estatura:.2f} metros**.")
