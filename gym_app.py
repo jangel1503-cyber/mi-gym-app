@@ -53,12 +53,14 @@ def cargar_todo():
         try:
             with open(DB_FILE, "r", encoding='utf-8') as f:
                 data = json.load(f)
-                # Asegurar compatibilidad con versiones anteriores
+                # Asegurar compatibilidad
                 if "historial_pesos" not in data:
                     data["historial_pesos"] = []
+                if "user" in data and "dias_entreno" not in data["user"]:
+                    data["user"]["dias_entreno"] = 5
                 return data
         except: pass
-    return {"perfil_completado": False, "user": {}, "rutina_semanal": {}, "historial_pesos": []}
+    return {"perfil_completado": False, "user": {"dias_entreno": 5}, "rutina_semanal": {}, "historial_pesos": []}
 
 if 'data' not in st.session_state:
     st.session_state.data = cargar_todo()
@@ -84,10 +86,14 @@ def calcular_macros(u):
     peso_kg = u.get('peso_lb', 160) * 0.453592
     estatura_cm = u.get('estatura_m', 1.70) * 100
     edad = u.get('edad', 25)
+    dias = u.get('dias_entreno', 5)
     
-    # BMR (Mifflin-St Jeor para hombres como base, ajustable)
+    # BMR (Mifflin-St Jeor)
     bmr = (10 * peso_kg) + (6.25 * estatura_cm) - (5 * edad) + 5
-    tdee = bmr * 1.4 # Nivel de actividad moderado
+    
+    # Multiplicador dinámico basado en días de entreno
+    activ = 1.2 if dias < 3 else (1.375 if dias == 3 else (1.55 if dias == 4 else 1.725))
+    tdee = bmr * activ
     
     objetivos = u.get('objetivos', [])
     target = tdee
@@ -159,22 +165,37 @@ def generar_rutina_ia(u):
     reps = "8-12" if es_intenso else "12-15"
     if edad > 55: reps = "15-20" # Menos carga, más reps para proteger
 
-    distribucion = {
-        "Lunes": "Pecho/Hombros",
-        "Martes": "Piernas",
-        "Miércoles": "Descanso Activo",
-        "Jueves": "Espalda/Brazos",
-        "Viernes": "Híbrido/Funcional"
-    }
-
     rutina = {}
+    dias_e = u.get('dias_entreno', 5)
+    
+    if dias_e == 3:
+        distribucion = {
+            "Lunes": "Pecho/Espalda/Hombros",
+            "Miércoles": "Piernas/Core",
+            "Viernes": "Full Body/Funcional"
+        }
+    elif dias_e == 4:
+        distribucion = {
+            "Lunes": "Pecho/Hombros",
+            "Martes": "Piernas",
+            "Jueves": "Espalda/Brazos",
+            "Viernes": "Híbrido/Funcional"
+        }
+    else: # 5 Días
+        distribucion = {
+            "Lunes": "Pecho/Hombros",
+            "Martes": "Piernas",
+            "Miércoles": "Descanso Activo",
+            "Jueves": "Espalda/Brazos",
+            "Viernes": "Funcional/Core"
+        }
+
     for dia, enfoque in distribucion.items():
         if "Descanso" in enfoque:
             rutina[dia] = "Día de recuperación: Estiramientos dinámicos o 30 min de caminata ligera."
             continue
             
         ejercicios_dia = []
-        # Selección de grupos según enfoque
         grupos = enfoque.split("/")
         for g in grupos:
             pool = []
@@ -183,7 +204,8 @@ def generar_rutina_ia(u):
             elif g == "Piernas": pool = EJERCICIOS_AVANZADOS["Piernas"]
             elif g == "Espalda": pool = EJERCICIOS_AVANZADOS["Espalda"]
             elif g == "Brazos": pool = EJERCICIOS_AVANZADOS["Brazos"]
-            elif g == "Híbrido" or g == "Funcional": pool = EJERCICIOS_AVANZADOS["Cardio/Funcional"]
+            elif g in ["Funcional", "Híbrido", "Full Body"]: pool = EJERCICIOS_AVANZADOS["Cardio/Funcional"]
+            elif g == "Core": pool = EJERCICIOS_AVANZADOS["Core/Postura"]
             
             if pool:
                 num_ej = 2 if len(grupos) > 1 else 4
@@ -195,14 +217,6 @@ def generar_rutina_ia(u):
                         "series": series, "reps": reps, 
                         "libras": libras, "tip": s["tip"]
                     })
-        
-        # Inyección de Core/Postura si aplica
-        if enfasis_core and dia in ["Martes", "Viernes"]:
-            c = random.choice(EJERCICIOS_AVANZADOS["Core/Postura"])
-            ejercicios_dia.append({
-                "ejercicio": c["nombre"], "series": 3, "reps": "15-20", "libras": 0, "tip": c["tip"]
-            })
-            
         rutina[dia] = ejercicios_dia
     return rutina
 
@@ -215,15 +229,16 @@ if not st.session_state.data.get("perfil_completado", False):
         st.markdown("#### 👤 Datos Personales")
         nombre = st.text_input("¿Cuál es tu nombre?")
         
-        st.markdown("#### 📏 Medidas y Edad")
+        st.markdown("#### 📏 Medidas y Objetivos")
         c_p, c_ft, c_in, c_ed = st.columns(4)
         peso = c_p.number_input("Peso (Lbs)", 50.0, 500.0, 160.0)
         pies = c_ft.number_input("Pies", 3, 8, 5)
         pulgadas = c_in.number_input("Pulgadas", 0, 11, 7)
         edad = c_ed.number_input("Edad", 12, 100, 25)
         
-        st.markdown("#### 🎯 Objetivos de Entrenamiento")
-        objs = st.multiselect("Selecciona tus metas:", LISTA_OBJETIVOS)
+        c_d, c_o = st.columns([1, 2])
+        dias_e = c_d.selectbox("Días de Entreno", [3, 4, 5], index=2)
+        objs = c_o.multiselect("Selecciona tus metas:", LISTA_OBJETIVOS)
         
         st.markdown("<br>", unsafe_allow_html=True)
         submit = st.form_submit_button("🚀 Generar Mi Plan Inteligente", use_container_width=True)
@@ -234,7 +249,7 @@ if not st.session_state.data.get("perfil_completado", False):
                 st.session_state.data["user"] = {
                     "nombre": nombre, "peso_lb": peso, "pies": pies, 
                     "pulgadas": pulgadas, "estatura_m": est_m, "objetivos": objs,
-                    "edad": edad
+                    "edad": edad, "dias_entreno": dias_e
                 }
                 st.session_state.data["perfil_completado"] = True
                 st.session_state.data["rutina_semanal"] = generar_rutina_ia(st.session_state.data["user"])
@@ -371,12 +386,13 @@ else:
             st.markdown("#### 👤 Información Personal")
             n_nombre = st.text_input("Nombre", u.get('nombre'))
             
-            st.markdown("#### 📏 Medidas y Edad")
-            n_peso = st.number_input("Peso (Lbs)", value=float(u.get('peso_lb')))
-            c_f, c_i, c_e = st.columns(3)
-            n_pies = c_f.number_input("Pies", 3, 8, value=int(u.get('pies')))
-            n_pulgadas = c_i.number_input("Pulgadas", 0, 11, value=int(u.get('pulgadas')))
+            st.markdown("#### 📏 Medidas y Frecuencia")
+            n_peso = st.number_input("Peso (Lbs)", value=float(u.get('peso_lb', 160)))
+            c_f, c_i, c_e, c_d = st.columns(4)
+            n_pies = c_f.number_input("Pies", 3, 8, value=int(u.get('pies', 5)))
+            n_pulgadas = c_i.number_input("Pulgadas", 0, 11, value=int(u.get('pulgadas', 7)))
             n_edad = c_e.number_input("Edad", 12, 100, value=int(u.get('edad', 25)))
+            n_dias = c_d.selectbox("Días/Semana", [3, 4, 5], index=[3, 4, 5].index(u.get('dias_entreno', 5)))
             
             st.markdown("#### 🎯 Mis Objetivos")
             objs_actuales = [o for o in u.get('objetivos', []) if o in LISTA_OBJETIVOS]
@@ -388,7 +404,7 @@ else:
                 st.session_state.data["user"] = {
                     "nombre": n_nombre, "peso_lb": n_peso, "pies": n_pies, 
                     "pulgadas": n_pulgadas, "estatura_m": est_m, "objetivos": n_objs,
-                    "edad": n_edad
+                    "edad": n_edad, "dias_entreno": n_dias
                 }
                 guardar_todo(st.session_state.data)
                 st.rerun()
