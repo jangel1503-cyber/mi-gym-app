@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import random
+import pandas as pd
 import google.generativeai as genai
 
 # --- CONFIGURACIÓN ---
@@ -65,9 +66,23 @@ def cargar_todo():
                     data["historial_pesos"] = []
                 if "user" in data and "dias_entreno" not in data["user"]:
                     data["user"]["dias_entreno"] = 5
+                if "historial_entrenamientos" not in data:
+                    data["historial_entrenamientos"] = []
+                if "pr_por_ejercicio" not in data:  # Personal Records
+                    data["pr_por_ejercicio"] = {}
+                if "fecha_ultima_rotacion" not in data:
+                    data["fecha_ultima_rotacion"] = None
                 return data
         except: pass
-    return {"perfil_completado": False, "user": {"dias_entreno": 5}, "rutina_semanal": {}, "historial_pesos": []}
+    return {
+        "perfil_completado": False, 
+        "user": {"dias_entreno": 5}, 
+        "rutina_semanal": {}, 
+        "historial_pesos": [],
+        "historial_entrenamientos": [],
+        "pr_por_ejercicio": {},
+        "fecha_ultima_rotacion": None
+    }
 
 if 'data' not in st.session_state:
     st.session_state.data = cargar_todo()
@@ -180,37 +195,47 @@ def generar_rutina_gemini(perfil_json):
     """Consulta a Gemini para generar rutina personalizada"""
     try:
         prompt = f"""
-Eres un entrenador personal experto con 20 años de experiencia. Genera una rutina de entrenamiento personalizada.
+IMPORTANTE: Eres un entrenador personal certificado con 20+ años. Genera una rutina ULTRA PERSONALIZADA.
 
-PERFIL DEL CLIENTE:
+PERFIL DEL CLIENTE (CRÍTICO):
 {json.dumps(perfil_json, indent=2, ensure_ascii=False)}
 
-GENERA UNA RUTINA EN FORMATO JSON EXACTO (sin markdown, solo JSON válido):
+RESTRICCIONES ESPECÍFICAS POR SEXO Y EDAD:
+- Si es MUJER: Enfatiza glúteos, piernas, core. Evita cargas muy pesadas al inicio. Incluye ejercicios para tonificación.
+- Si es HOMBRE: Enfatiza pecho, espalda, brazos. Cargas más pesadas. Enfoque en masa muscular si aplica.
+- Si edad > 50: Reducir impacto articular. Más énfasis en movilidad y postura.
+- Si edad < 25: Puede ser más intenso. Enfoque en desarrollo y fuerza.
+
+AJUSTA REPS POR OBJETIVO:
+- Ganancia muscular: 6-12 reps con peso pesado
+- Pérdida grasa: 12-15+ reps, tempo más rápido
+- Tonificación: 10-15 reps, peso moderado
+- Resistencia: 15-20 reps, poco descanso
+
+FORMATO JSON REQUERIDO (EXACTO):
 {{
   "Lunes": [
     {{
-      "ejercicio": "Nombre del ejercicio",
+      "ejercicio": "Press de Banca",
       "series": 4,
-      "reps": "8-12",
-      "peso_recomendado_lb": 100,
-      "tip": "Consejo técnico específico para este cliente",
-      "razon_ia": "Por qué es ideal para este cliente (edad, sexo, objetivos)"
+      "reps_por_serie": ["12", "10", "8", "6"],
+      "peso_lb_por_serie": [100, 110, 120, 130],
+      "tip": "Consejo técnico para ESTE cliente específicamente",
+      "razon": "Por qué es perfecto para {perfil_json.get('sexo')}, {perfil_json.get('edad')} años, objetivo: ..."
     }}
   ],
   "Martes": [...],
-  "Miércoles": "string si es día de descanso",
-  "Jueves": [...],
-  "Viernes": [...]
+  "Miércoles": "Día de descanso: Estiramientos o yoga"
 }}
 
-CONSIDERACIONES:
-- Edad: {perfil_json.get('edad')} años → Ajusta intensidad
-- Sexo: {perfil_json.get('sexo')} → Personaliza énfasis muscular
-- Objetivos: {', '.join(perfil_json.get('objetivos', [])[:3])}
-- Días: {perfil_json.get('dias_entreno')}/semana
-- Peso actual: {perfil_json.get('peso_lb')} lbs
+OBLIGATORIO:
+- Reps VARÍAN en cada serie (no repetir)
+- Peso AUMENTA conforme bajan las reps (pirámide inversa)
+- Mínimo 3-4 ejercicios por día
+- Personalizar según SEXO y OBJETIVOS
+- Respeta dias_entreno={perfil_json.get('dias_entreno')}
 
-Solo retorna el JSON válido sin explicaciones adicionales.
+Solo retorna JSON válido. Sin markdown, sin explicaciones.
 """
         response = model.generate_content(prompt)
         respuesta_texto = response.text.strip()
@@ -312,8 +337,21 @@ def generar_rutina_ia(u):
                 for s in seleccion:
                     detalles_sets = []
                     libras_base = round(peso_lb * random.uniform(0.20, 0.40), 0)
-                    for _ in range(series):
-                        detalles_sets.append({"reps": reps, "libras": libras_base})
+                    
+                    # Generar reps y pesos variados realísticamente
+                    for set_idx in range(series):
+                        # Reps bajan conforme suben las series (pirámide inversa)
+                        if reps == "8-12":  # Hipertrofia
+                            reps_set = str(max(6, 12 - set_idx * 2))  # 12, 10, 8, 6
+                        elif reps == "12-15":  # Tonificación
+                            reps_set = str(max(10, 15 - set_idx * 1))  # 15, 14, 13, 12
+                        else:  # Resistencia 15-20
+                            reps_set = str(max(15, 20 - set_idx * 1))  # 20, 19, 18, 17
+                        
+                        # Peso aumenta conforme bajan reps (pirámide inversa)
+                        factor_fatiga = 1.0 - (set_idx * 0.08)  # ~8% menos por cada set
+                        libras_set = round(max(libras_base * factor_fatiga, 5), 0)
+                        detalles_sets.append({"reps": reps_set, "libras": libras_set})
 
                     ejercicios_dia.append({
                         "ejercicio": s["nombre"], 
@@ -323,6 +361,217 @@ def generar_rutina_ia(u):
                     })
         rutina[dia] = ejercicios_dia
     return rutina
+
+# --- FUNCIONES AVANZADAS ---
+
+def obtener_ejercicios_alternativos(ejercicio, musculo_objetivo):
+    """Genera ejercicios alternativos usando IA con fallback local"""
+    # Primero, encontrar el músculo objetivo del ejercicio
+    musculo_encontrado = None
+    for musculo, ejercicios_lista in EJERCICIOS_AVANZADOS.items():
+        for ej in ejercicios_lista:
+            if ej["nombre"].lower() == ejercicio.lower():
+                musculo_encontrado = musculo
+                break
+        if musculo_encontrado:
+            break
+    
+    # Si no lo encontramos, intentar con Gemini
+    if not musculo_encontrado:
+        musculo_encontrado = "músculos objetivo"
+    
+    try:
+        prompt = f"""
+Eres un experto en entrenamiento físico certificado. 
+
+El usuario está haciendo: {ejercicio}
+Grupo muscular: {musculo_encontrado}
+
+Dame EXACTAMENTE 3 ejercicios alternativos que trabajen el MISMO grupo muscular.
+
+IMPORTANTE: Devuelve SOLO JSON válido, sin explicaciones adicionales:
+
+{{
+  "alternativas": [
+    {{"nombre": "Nombre Ejercicio 1", "razon": "Breve razón por qué es buen sustituto"}},
+    {{"nombre": "Nombre Ejercicio 2", "razon": "Breve razón por qué es buen sustituto"}},
+    {{"nombre": "Nombre Ejercicio 3", "razon": "Breve razón por qué es buen sustituto"}}
+  ]
+}}
+"""
+        response = model.generate_content(prompt)
+        texto = response.text.strip()
+        
+        # Limpiar markdown
+        if "```json" in texto:
+            texto = texto.split("```json")[1].split("```")[0]
+        elif "```" in texto:
+            texto = texto.split("```")[1].split("```")[0]
+        
+        resultado = json.loads(texto.strip())
+        
+        if resultado.get("alternativas") and len(resultado["alternativas"]) > 0:
+            return resultado
+    except Exception as e:
+        pass
+    
+    # Fallback: generar alternativas locales
+    if musculo_encontrado and musculo_encontrado in EJERCICIOS_AVANZADOS:
+        ejercicios_disponibles = [e["nombre"] for e in EJERCICIOS_AVANZADOS[musculo_encontrado] if e["nombre"].lower() != ejercicio.lower()]
+        alternativas = []
+        for ej in ejercicios_disponibles[:3]:
+            alternativas.append({
+                "nombre": ej,
+                "razon": f"Excelente alternativa para {musculo_encontrado}"
+            })
+        
+        if alternativas:
+            return {"alternativas": alternativas}
+    
+    return {"alternativas": []}
+
+def generar_warmup(dia_entreno, ejercicios_dia):
+    """Genera warmup personalizado para el día"""
+    try:
+        ejercicios_str = ", ".join([e.get('ejercicio', '') for e in (ejercicios_dia if isinstance(ejercicios_dia, list) else [])])
+        prompt = f"""
+Eres entrenador certificado. Genera un warmup de 10 minutos para {dia_entreno} con estos ejercicios: {ejercicios_str}.
+
+Formato JSON:
+{{
+  "warmup": [
+    {{"actividad": "Descripción", "duracion_min": 2}},
+    {{"actividad": "Descripción", "duracion_min": 3}},
+    {{"actividad": "Descripción", "duracion_min": 5}}
+  ]
+}}
+
+Solo JSON válido.
+"""
+        response = model.generate_content(prompt)
+        texto = response.text.strip()
+        if "```" in texto:
+            texto = texto.replace("```json", "").replace("```", "")
+        return json.loads(texto.strip())
+    except:
+        return {"warmup": [{"actividad": "Cardio ligero", "duracion_min": 5}, {"actividad": "Movilidad articular", "duracion_min": 5}]}
+
+def calcular_tiempo_descanso(objetivo, reps):
+    """Calcula tiempo de descanso sugerido"""
+    tiempos = {
+        "hipertrofia": {"6-8": "90-120s", "8-12": "60-90s", "12-15": "45-60s"},
+        "fuerza": {"1-5": "120-180s", "5-8": "90-120s"},
+        "resistencia": {"15-20": "30-45s"},
+        "tonificacion": {"10-15": "45-60s"}
+    }
+    
+    if objetivo == "Ganancia muscular":
+        objetivo = "hipertrofia"
+    elif objetivo == "Pérdida grasa":
+        objetivo = "resistencia"
+    elif objetivo == "Tonificación":
+        objetivo = "tonificacion"
+    else:
+        objetivo = "hipertrofia"
+    
+    try:
+        for rango, tiempo in tiempos.get(objetivo, {}).items():
+            return tiempo
+    except:
+        return "60s"
+
+def registrar_entrenamiento(dia, ejercicios_completados):
+    """Registra un entrenamiento completo"""
+    from datetime import datetime
+    entrenamiento = {
+        "fecha": str(datetime.now().date()),
+        "hora": str(datetime.now().time())[0:5],
+        "dia": dia,
+        "ejercicios": ejercicios_completados,
+        "duracion_min": 0
+    }
+    return entrenamiento
+
+def calcular_progreso_ejercicio(ejercicio_nombre, historial):
+    """Calcula progreso en un ejercicio específico"""
+    registros = [e for entrenamientos in historial 
+                 for e in entrenamientos.get('ejercicios', []) 
+                 if e.get('nombre') == ejercicio_nombre]
+    
+    if len(registros) < 2:
+        return {"tendencia": "sin datos", "mejora": 0}
+    
+    primer_peso = registros[0].get('peso_levantado', 0)
+    ultimo_peso = registros[-1].get('peso_levantado', 0)
+    mejora = ultimo_peso - primer_peso
+    
+    return {
+        "tendencia": "↑" if mejora > 0 else ("↓" if mejora < 0 else "→"),
+        "mejora": mejora,
+        "registros_totales": len(registros)
+    }
+
+def detectar_meseta_y_rotar_rutina(historial_entrenamientos, fecha_ultima_rotacion, dias_entrenamientos):
+    """Detecta si hay meseta y genera nueva rutina"""
+    from datetime import datetime, timedelta
+    
+    if not fecha_ultima_rotacion:
+        return False, "Nueva rutina"
+    
+    dias_desde_rotacion = (datetime.now().date() - datetime.fromisoformat(fecha_ultima_rotacion).date()).days
+    
+    # Si pasó 4 semanas sin mejoría, rotar
+    if dias_desde_rotacion >= 28:
+        return True, "⚠️ Meseta detectada. Nueva rutina generada."
+    
+    return False, ""
+
+def recomendaciones_ia(progreso_data, user_profile):
+    """Genera recomendaciones inteligentes basadas en progreso"""
+    try:
+        prompt = f"""
+Eres entrenador certificado. Basado en este progreso:
+{json.dumps(progreso_data, ensure_ascii=False)}
+
+Perfil: {user_profile.get('sexo')}, {user_profile.get('edad')} años, objetivo: {user_profile.get('objetivos', [''])[0]}
+
+Dame 3 recomendaciones ESPECÍFICAS para mejorar (máx 50 palabras cada una):
+
+Formato JSON:
+{{
+  "recomendaciones": [
+    {{"titulo": "Recomendación 1", "descripcion": "..."}},
+    {{"titulo": "Recomendación 2", "descripcion": "..."}},
+    {{"titulo": "Recomendación 3", "descripcion": "..."}}
+  ]
+}}
+
+Solo JSON válido.
+"""
+        response = model.generate_content(prompt)
+        texto = response.text.strip()
+        if "```" in texto:
+            texto = texto.replace("```json", "").replace("```", "")
+        return json.loads(texto.strip())
+    except:
+        return {"recomendaciones": []}
+
+def obtener_musculos_del_dia(ejercicios_dia):
+    """Extrae los grupos musculares trabajados en un día"""
+    # Crear mapeo de ejercicios a músculos
+    mapeo_ejercicios = {}
+    for musculo, ejercicios_lista in EJERCICIOS_AVANZADOS.items():
+        for ej in ejercicios_lista:
+            mapeo_ejercicios[ej["nombre"].lower()] = musculo
+    
+    musculos_unicos = set()
+    if isinstance(ejercicios_dia, list):
+        for ej in ejercicios_dia:
+            nombre = ej.get("ejercicio", "").lower()
+            musculo = mapeo_ejercicios.get(nombre, "Otros")
+            musculos_unicos.add(musculo)
+    
+    return sorted(list(musculos_unicos))
 
 # --- INTERFAZ ---
 if not st.session_state.data.get("perfil_completado", False):
@@ -389,7 +638,7 @@ else:
             st.warning("¿Estás seguro?")
             c1, c2 = st.columns(2)
             if c1.button("✅ Sí", use_container_width=True):
-                st.session_state.data = {"perfil_completado": False, "user": {}, "rutina_semanal": {}, "historial_pesos": []}
+                st.session_state.data = {"perfil_completado": False, "user": {}, "rutina_semanal": {}, "historial_pesos": [], "historial_entrenamientos": [], "pr_por_ejercicio": {}, "fecha_ultima_rotacion": None}
                 st.session_state.confirmar_reinicio = False
                 guardar_todo(st.session_state.data)
                 st.rerun()
@@ -409,19 +658,35 @@ else:
     with c3:
         st.metric("Peso Ideal (Lbs)", f"{p_min} - {p_max}")
 
-    t_rutina, t_progreso, t_perfil = st.tabs(["📅 Mi Rutina", "📈 Mi Progreso", "👤 Perfil"])
+    t_rutina, t_entrenamiento, t_progreso, t_alternativas, t_recomendaciones, t_perfil = st.tabs(
+        ["📅 Mi Rutina", "💪 Entrenar Hoy", "📈 Progreso", "🔄 Alternativas", "🤖 Recomendaciones", "👤 Perfil"]
+    )
 
     with t_rutina:
         st.markdown("### 🏋️ Tu Plan de Entrenamiento Personalizado")
+        
+        # Recargar siempre los datos más frescos
+        st.session_state.data = cargar_todo()
         rutina = st.session_state.data.get("rutina_semanal", {})
         for dia, ejercicios in rutina.items():
-            with st.expander(f"📅 {dia.upper()}", expanded=(dia=="Lunes")):
+            # Obtener músculos del día
+            musculos = obtener_musculos_del_dia(ejercicios if isinstance(ejercicios, list) else [])
+            musculos_text = ", ".join(musculos) if musculos else "Descanso"
+            
+            with st.expander(f"📅 {dia.upper()} - 🔥 {musculos_text}", expanded=(dia=="Lunes")):
                 if isinstance(ejercicios, str):
                     st.info(ejercicios)
                 else:
                     for i, ej in enumerate(ejercicios):
+                        # Convertir formato de Gemini (reps_por_serie/peso_lb_por_serie) al nuestro
+                        if 'reps_por_serie' in ej and 'peso_lb_por_serie' in ej:
+                            ej['detalles_sets'] = [
+                                {"reps": str(ej['reps_por_serie'][idx]), "libras": float(ej['peso_lb_por_serie'][idx])}
+                                for idx in range(len(ej['reps_por_serie']))
+                            ]
+                            ej['series'] = len(ej['reps_por_serie'])
                         # Asegurar compatibilidad con datos antiguos
-                        if 'detalles_sets' not in ej:
+                        elif 'detalles_sets' not in ej:
                             old_reps = ej.get('reps', '12')
                             old_lbs = ej.get('libras', 0)
                             ej['detalles_sets'] = [{"reps": old_reps, "libras": old_lbs} for _ in range(int(ej.get('series', 3)))]
@@ -466,6 +731,156 @@ else:
             guardar_todo(st.session_state.data)
             st.toast("¡Cambios guardados!", icon="✅")
 
+    with t_entrenamiento:
+        st.markdown("### 💪 Entrenar Hoy")
+        from datetime import datetime
+        hoy = datetime.now().strftime("%A")
+        dias_map = {"Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles", "Thursday": "Jueves", "Friday": "Viernes", "Saturday": "Sábado", "Sunday": "Domingo"}
+        dia_hoy = dias_map.get(hoy, hoy)
+        
+        rutina = st.session_state.data.get("rutina_semanal", {})
+        
+        if dia_hoy in rutina:
+            ejercicios_hoy = rutina[dia_hoy]
+            # Obtener músculos del día
+            musculos = obtener_musculos_del_dia(ejercicios_hoy if isinstance(ejercicios_hoy, list) else [])
+            musculos_text = ", ".join(musculos) if musculos else "Descanso"
+            
+            st.success(f"✅ Hoy es {dia_hoy} - 🔥 {musculos_text}")
+            
+            # Mostrar warmup sugerido
+            with st.expander("🔥 Warmup Personalizado (5 min)"):
+                warmup = generar_warmup(dia_hoy, ejercicios_hoy if isinstance(ejercicios_hoy, list) else [])
+                for actividad in warmup.get('warmup', []):
+                    st.write(f"⏱️ {actividad['actividad']} - {actividad['duracion_min']} min")
+            
+            # Entrenamientos
+            if isinstance(ejercicios_hoy, list):
+                ejercicios_registrados = []
+                for idx, ej in enumerate(ejercicios_hoy):
+                    with st.expander(f"🏋️ {ej['ejercicio']}", expanded=(idx == 0)):
+                        st.info(f"💡 {ej.get('tip', '')}")
+                        
+                        # Mostrar plan
+                        for s_idx, detalle in enumerate(ej.get('detalles_sets', [])):
+                            col1, col2, col3, col4 = st.columns(4)
+                            col1.write(f"**Set {s_idx+1}**")
+                            col2.write(f"🔢 {detalle['reps']} reps")
+                            col3.write(f"⚖️ {detalle['libras']} lbs")
+                            col4.write(f"⏱️ {calcular_tiempo_descanso(u.get('objetivos', [''])[0] if u.get('objetivos') else 'hipertrofia', detalle['reps'])}")
+                        
+                        # Registrar resultado
+                        with st.form(f"form_ejer_{idx}"):
+                            reps_real = st.number_input(f"Reps completadas", 0, 100, key=f"reps_{idx}")
+                            peso_real = st.number_input(f"Peso levantado (lbs)", 0.0, 1000.0, key=f"peso_{idx}")
+                            notas = st.text_area(f"Notas", key=f"notas_{idx}")
+                            
+                            if st.form_submit_button(f"✅ Completado {ej['ejercicio']}", key=f"submit_{idx}"):
+                                ejercicios_registrados.append({
+                                    "nombre": ej['ejercicio'],
+                                    "reps_completadas": reps_real,
+                                    "peso_levantado": peso_real,
+                                    "notas": notas
+                                })
+                                st.success("✅ Registrado!")
+                
+                # Botón para guardar todo el entrenamiento
+                if st.button("💾 Guardar Entrenamiento Completo", key="save_all_training"):
+                    entrenamiento = registrar_entrenamiento(dia_hoy, ejercicios_registrados)
+                    st.session_state.data["historial_entrenamientos"].append(entrenamiento)
+                    guardar_todo(st.session_state.data)
+                    st.success("¡Entrenamiento guardado!")
+                    st.balloons()
+            else:
+                st.info(f"📅 {ejercicios_hoy}")
+        else:
+            st.warning(f"📅 No hay rutina para {dia_hoy}")
+
+    with t_alternativas:
+        st.markdown("### 🔄 Ejercicios Alternativos")
+        st.write("¿No tienes equipo disponible? Encuentra alternativas para tus ejercicios.")
+        
+        rutina = st.session_state.data.get("rutina_semanal", {})
+        todos_ejercicios = []
+        mapeo_ejercicio_dia = {}
+        
+        # Crear lista con ID único
+        for dia, ejercicios in rutina.items():
+            if isinstance(ejercicios, list):
+                for idx, e in enumerate(ejercicios):
+                    ej_name = e['ejercicio']
+                    unique_id = f"{dia}_{idx}"  # ID único: día_índice
+                    todos_ejercicios.append((ej_name, unique_id))
+                    mapeo_ejercicio_dia[unique_id] = (dia, idx, ej_name)
+        
+        if todos_ejercicios:
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                ejercicio_display = [e[0] for e in todos_ejercicios]
+                idx_sel = st.selectbox("Selecciona un ejercicio", range(len(ejercicio_display)), 
+                                       format_func=lambda i: ejercicio_display[i])
+                unique_id = todos_ejercicios[idx_sel][1]
+                ejercicio_sel = todos_ejercicios[idx_sel][0]
+            
+            with col2:
+                buscar = st.button("🔍 Buscar Alternativas", use_container_width=True)
+            
+            if buscar:
+                with st.spinner("Buscando alternativas con IA..."):
+                    alternativas = obtener_ejercicios_alternativos(ejercicio_sel, "")
+                    
+                    st.markdown(f"**Alternativas para: {ejercicio_sel}**")
+                    
+                    if alternativas.get('alternativas') and len(alternativas['alternativas']) > 0:
+                        for idx, alt in enumerate(alternativas['alternativas'], 1):
+                            col_alt1, col_alt2 = st.columns([3, 1])
+                            with col_alt1:
+                                st.write(f"**Opción {idx}: {alt['nombre']}**")
+                                st.caption(f"💡 {alt['razon']}")
+                            with col_alt2:
+                                if st.button(f"✅ Usar", key=f"alt_{idx}_{unique_id}"):
+                                    # Obtener datos del mapeo
+                                    dia, ej_idx, ej_original = mapeo_ejercicio_dia[unique_id]
+                                    
+                                    # Reemplazar en rutina
+                                    st.session_state.data["rutina_semanal"][dia][ej_idx]['ejercicio'] = alt['nombre']
+                                    guardar_todo(st.session_state.data)
+                                    
+                                    # Recargar desde JSON para asegurar sincronización
+                                    st.session_state.data = cargar_todo()
+                                    
+                                    st.success(f"✅ {ej_original} → {alt['nombre']}")
+                                    st.toast(f"Cambio guardado en {dia}", icon="💪")
+                                    st.balloons()
+                                    
+                                    # Pequeña pausa y rerun
+                                    import time
+                                    time.sleep(0.5)
+                                    st.rerun()
+                    else:
+                        st.warning("⚠️ No se encontraron alternativas en este momento")
+        else:
+            st.info("Carga una rutina primero")
+
+    with t_recomendaciones:
+        st.markdown("### 🤖 Recomendaciones Personalizadas")
+        
+        historial_ent = st.session_state.data.get("historial_entrenamientos", [])
+        if len(historial_ent) >= 3:
+            if st.button("🔮 Generar Recomendaciones"):
+                with st.spinner("Analizando tu progreso..."):
+                    progreso = {
+                        "entrenamientos_totales": len(historial_ent),
+                        "ultimo_entrenamiento": historial_ent[-1] if historial_ent else None
+                    }
+                    recomendaciones = recomendaciones_ia(progreso, u)
+                    
+                    for rec in recomendaciones.get('recomendaciones', []):
+                        st.info(f"**{rec['titulo']}**\n{rec['descripcion']}")
+        else:
+            st.info(f"Necesitas al menos 3 entrenamientos registrados (tienes {len(historial_ent)})")
+
+
     with t_progreso:
         st.markdown("### 📊 Evolución y Análisis Nutricional")
         
@@ -479,12 +894,11 @@ else:
                     from datetime import date
                     hoy = str(date.today())
                     st.session_state.data["historial_pesos"].append({"fecha": hoy, "peso": n_p})
-                    st.session_state.data["user"]["peso_lb"] = n_p # Actualizar peso actual
+                    st.session_state.data["user"]["peso_lb"] = n_p
                     guardar_todo(st.session_state.data)
                     st.success(f"¡Peso de {n_p} lbs registrado!")
                     st.rerun()
             
-            # Cálculo de macros
             cal, p, g, c = calcular_macros(u)
             st.markdown(f"""
                 <div class="exercise-card" style="border-left-color: var(--secondary);">
@@ -493,20 +907,31 @@ else:
                 </div>
             """, unsafe_allow_html=True)
             st.markdown(f"**Macros Directriz:**")
-            st.write(f"🥩 Proteína: {p}g")
-            st.write(f"🍞 Carbos: {c}g")
-            st.write(f"🥑 Grasas: {g}g")
+            st.write(f"🥩 Proteína: {p}g | 🍞 Carbos: {c}g | 🥑 Grasas: {g}g")
 
         with c2:
             st.markdown("#### 📉 Tendencia de Peso")
             historial = st.session_state.data.get("historial_pesos", [])
             if historial:
-                import pandas as pd
                 df = pd.DataFrame(historial)
                 df['fecha'] = pd.to_datetime(df['fecha'])
                 st.line_chart(df.set_index('fecha')['peso'])
+                
+                # Estadísticas
+                pesos = [h['peso'] for h in historial]
+                st.metric("Peso Inicial", f"{pesos[0]:.1f} lbs", f"{pesos[-1] - pesos[0]:.1f} lbs")
             else:
                 st.info("Aún no tienes registros de peso. ¡Empieza hoy!")
+            
+            st.markdown("#### 📅 Historial de Entrenamientos")
+            historial_ent = st.session_state.data.get("historial_entrenamientos", [])
+            if historial_ent:
+                entrenamientos_df = pd.DataFrame(historial_ent)
+                if len(entrenamientos_df) > 0:
+                    st.metric("Total Entrenamientos", len(entrenamientos_df))
+                    st.dataframe(entrenamientos_df[['fecha', 'dia', 'duracion_min']], use_container_width=True)
+            else:
+                st.info("Aún no has registrado entrenamientos.")
 
     with t_perfil:
         st.markdown("### ⚙️ Configuración de Perfil")
