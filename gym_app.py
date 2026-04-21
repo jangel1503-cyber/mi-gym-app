@@ -195,10 +195,21 @@ else:
         """, unsafe_allow_html=True)
         st.info(f"📍 Meta: {len(u.get('objetivos', []))} objetivos seleccionados.")
         
-        if st.button("⚠️ Reiniciar App", use_container_width=True):
-            st.session_state.data = {"perfil_completado": False, "user": {}, "rutina_semanal": {}}
-            guardar_todo(st.session_state.data)
-            st.rerun()
+        if not st.session_state.get('confirmar_reinicio', False):
+            if st.button("⚠️ Reiniciar App", use_container_width=True):
+                st.session_state.confirmar_reinicio = True
+                st.rerun()
+        else:
+            st.warning("¿Estás seguro?")
+            c1, c2 = st.columns(2)
+            if c1.button("✅ Sí", use_container_width=True):
+                st.session_state.data = {"perfil_completado": False, "user": {}, "rutina_semanal": {}, "historial_pesos": []}
+                st.session_state.confirmar_reinicio = False
+                guardar_todo(st.session_state.data)
+                st.rerun()
+            if c2.button("❌ No", use_container_width=True):
+                st.session_state.confirmar_reinicio = False
+                st.rerun()
 
     # --- DASHBOARD PRINCIPAL ---
     st.markdown(f'<h1 class="main-header">Panel de Control: {u.get("nombre")}</h1>', unsafe_allow_html=True)
